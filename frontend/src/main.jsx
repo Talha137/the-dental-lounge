@@ -1027,16 +1027,43 @@ function Shell() {
         }
 
         @media (max-width: 520px) {
-          .global-action-footer-left .global-footer-btn .footer-label {
+          .global-action-footer {
+            left: 18px;
+            right: 18px;
+            bottom: 10px;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+          }
+
+          .global-action-footer-left,
+          .global-action-footer-right {
+            flex: 0 0 auto;
+            gap: 5px;
+          }
+
+          .global-action-footer-left .global-footer-btn .footer-label,
+          .global-action-footer-right .global-footer-btn .footer-label {
             display: none;
           }
 
-          .global-action-footer {
-            justify-content: center;
+          .global-footer-btn {
+            width: 42px;
+            min-width: 42px;
+            height: 42px;
+            min-height: 42px;
+            padding: 0;
+            border-radius: 11px;
+            flex: 0 0 42px;
           }
 
-          .global-action-footer-right {
-            flex: 0 1 auto;
+          .global-footer-btn svg {
+            width: 18px;
+            height: 18px;
+          }
+
+          .main-content {
+            padding-bottom: 70px !important;
           }
         }
       `}</style>
