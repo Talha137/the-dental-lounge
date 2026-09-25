@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 import { z } from "zod";
 
 import { pool } from "../config/db.js";
@@ -13,18 +14,6 @@ const r = Router();
    HELPERS
 ========================================================= */
 
-/*
- * Convert the joined database row into the exact clinic
- * object used by the frontend.
- *
- * IMPORTANT:
- * We keep real database field names such as:
- * clinic_name
- * clinic_code
- *
- * This prevents the frontend from falling back to
- * "The Dental Lounge".
- */
 function buildClinic(u) {
   if (!u?.clinic_id) {
     return null;
@@ -33,7 +22,6 @@ function buildClinic(u) {
   return {
     id: u.clinic_id,
 
-    /* Clinic identity */
     clinic_name: u.clinic_name,
     clinic_code: u.clinic_code,
     owner_name: u.owner_name,
@@ -43,12 +31,7 @@ function buildClinic(u) {
     website: u.website,
     registration_no: u.registration_no,
 
-    /* Logo */
     logo_url: u.logo_url,
-
-    /* =====================================================
-       MAIN BRANDING
-    ===================================================== */
 
     primary_color:
       u.primary_color || "#0e7f86",
@@ -59,19 +42,11 @@ function buildClinic(u) {
     accent_color:
       u.accent_color || "#14a3a8",
 
-    /* =====================================================
-       GENERAL TEXT
-    ===================================================== */
-
     text_color:
       u.text_color || "#172033",
 
     muted_text_color:
       u.muted_text_color || "#64748b",
-
-    /* =====================================================
-       SIDEBAR
-    ===================================================== */
 
     sidebar_color:
       u.sidebar_color || "#071f25",
@@ -85,10 +60,6 @@ function buildClinic(u) {
     sidebar_active_text_color:
       u.sidebar_active_text_color || "#071f25",
 
-    /* =====================================================
-       PAGE / SURFACES
-    ===================================================== */
-
     page_background_color:
       u.page_background_color || "#f4fafb",
 
@@ -97,10 +68,6 @@ function buildClinic(u) {
 
     table_header_color:
       u.table_header_color || "#f8fafc",
-
-    /* =====================================================
-       BUTTONS
-    ===================================================== */
 
     primary_button_color:
       u.primary_button_color || "#0e7f86",
@@ -119,10 +86,6 @@ function buildClinic(u) {
 
     danger_button_text_color:
       u.danger_button_text_color || "#ffffff",
-
-    /* =====================================================
-       ALERTS / NOTIFICATIONS
-    ===================================================== */
 
     success_color:
       u.success_color || "#16a34a",
@@ -148,10 +111,6 @@ function buildClinic(u) {
     info_text_color:
       u.info_text_color || "#ffffff",
 
-    /* =====================================================
-       BILLING STATUSES
-    ===================================================== */
-
     paid_color:
       u.paid_color || "#16a34a",
 
@@ -169,10 +128,6 @@ function buildClinic(u) {
 
     unpaid_text_color:
       u.unpaid_text_color || "#ffffff",
-
-    /* =====================================================
-       APPOINTMENT STATUSES
-    ===================================================== */
 
     scheduled_color:
       u.scheduled_color || "#64748b",
@@ -204,19 +159,11 @@ function buildClinic(u) {
     no_show_text_color:
       u.no_show_text_color || "#ffffff",
 
-    /* =====================================================
-       FORMS / MODALS
-    ===================================================== */
-
     input_focus_color:
       u.input_focus_color || "#14a3a8",
 
     modal_accent_color:
       u.modal_accent_color || "#0e7f86",
-
-    /* =====================================================
-       WELCOME BANNER
-    ===================================================== */
 
     welcome_gradient_start:
       u.welcome_gradient_start || "#071f25",
@@ -227,29 +174,17 @@ function buildClinic(u) {
     welcome_text_color:
       u.welcome_text_color || "#ffffff",
 
-    /* =====================================================
-       REGIONAL
-    ===================================================== */
-
     currency:
       u.currency || "PKR",
 
     timezone:
       u.timezone || "Asia/Karachi",
 
-    /* =====================================================
-       PRINTING
-    ===================================================== */
-
     receipt_footer:
       u.receipt_footer,
 
     prescription_footer:
       u.prescription_footer,
-
-    /* =====================================================
-       SUBSCRIPTION
-    ===================================================== */
 
     plan:
       u.plan,
@@ -264,9 +199,6 @@ function buildClinic(u) {
 
 /* =========================================================
    COMMON USER + CLINIC SELECT
-
-   Used by both login and /me so both endpoints always
-   return exactly the same clinic branding information.
 ========================================================= */
 
 const USER_CLINIC_SELECT = `
@@ -282,6 +214,9 @@ const USER_CLINIC_SELECT = `
     u.active,
     u.last_login_at,
 
+    u.recovery_email,
+    u.recovery_email_verified_at,
+
     c.clinic_name,
     c.clinic_code,
 
@@ -296,82 +231,73 @@ const USER_CLINIC_SELECT = `
 
     c.logo_url,
 
-    /* Main branding */
     c.primary_color,
     c.secondary_color,
     c.accent_color,
 
-    /* General text */
     c.text_color,
     c.muted_text_color,
 
-    /* Sidebar */
     c.sidebar_color,
     c.sidebar_active_color,
     c.sidebar_text_color,
     c.sidebar_active_text_color,
 
-    /* Page / surfaces */
     c.page_background_color,
     c.card_background_color,
     c.table_header_color,
 
-    /* Buttons */
     c.primary_button_color,
     c.secondary_button_color,
     c.danger_button_color,
+
     c.primary_button_text_color,
     c.secondary_button_text_color,
     c.danger_button_text_color,
 
-    /* Alerts / notifications */
     c.success_color,
     c.warning_color,
     c.error_color,
     c.info_color,
+
     c.success_text_color,
     c.warning_text_color,
     c.error_text_color,
     c.info_text_color,
 
-    /* Billing statuses */
     c.paid_color,
     c.partial_color,
     c.unpaid_color,
+
     c.paid_text_color,
     c.partial_text_color,
     c.unpaid_text_color,
 
-    /* Appointment statuses */
     c.scheduled_color,
     c.confirmed_color,
     c.completed_color,
     c.cancelled_color,
     c.no_show_color,
+
     c.scheduled_text_color,
     c.confirmed_text_color,
     c.completed_text_color,
     c.cancelled_text_color,
     c.no_show_text_color,
 
-    /* Forms / modal */
     c.input_focus_color,
     c.modal_accent_color,
 
-    /* Welcome banner */
     c.welcome_gradient_start,
     c.welcome_gradient_end,
     c.welcome_text_color,
 
-    /* Regional */
     c.currency,
     c.timezone,
 
-    /* Printing */
     c.receipt_footer,
     c.prescription_footer,
 
-    /* Subscription */
     c.plan,
     c.subscription_status,
 
@@ -420,10 +346,6 @@ r.post(
 
     const u = rows[0];
 
-    /* =====================================================
-       CHECK USER + PASSWORD
-    ===================================================== */
-
     if (
       !u ||
       !(await bcrypt.compare(
@@ -436,18 +358,6 @@ r.post(
           "Invalid email or password",
       });
     }
-
-    /* =====================================================
-       CHECK CLINIC
-
-       Every normal clinic user must:
-       - belong to a clinic
-       - have an active clinic
-       - have an active subscription
-
-       Super Admin remains allowed according to the
-       existing SaaS architecture.
-    ===================================================== */
 
     if (
       u.system_role !== "super_admin"
@@ -478,10 +388,6 @@ r.post(
       }
     }
 
-    /* =====================================================
-       UPDATE LAST LOGIN
-    ===================================================== */
-
     await pool.query(
       `
         UPDATE users
@@ -495,10 +401,6 @@ r.post(
       [u.id]
     );
 
-    /* =====================================================
-       JWT
-    ===================================================== */
-
     const token = jwt.sign(
       {
         id: u.id,
@@ -507,25 +409,14 @@ r.post(
 
         email: u.email,
 
-        /*
-         * Legacy role retained because some existing
-         * frontend/backend code may still use it.
-         */
         role: u.role,
 
-        /*
-         * SaaS permissions.
-         */
         system_role:
           u.system_role,
 
         job_role:
           u.job_role,
 
-        /*
-         * Tenant ID comes only from database/JWT.
-         * Frontend cannot choose another clinic.
-         */
         clinic_id:
           u.clinic_id,
       },
@@ -539,16 +430,6 @@ r.post(
 
     const clinic =
       buildClinic(u);
-
-    /* =====================================================
-       LOGIN RESPONSE
-
-       Clinic is nested inside user.
-
-       We also return top-level clinic for compatibility
-       with any existing frontend code that still reads
-       data.clinic.
-    ===================================================== */
 
     res.json({
       token,
@@ -573,6 +454,12 @@ r.post(
 
         clinic_id:
           u.clinic_id,
+
+        recovery_email:
+          u.recovery_email,
+
+        recovery_email_verified_at:
+          u.recovery_email_verified_at,
 
         clinic,
       },
@@ -615,13 +502,6 @@ r.get(
       });
     }
 
-    /* =====================================================
-       RECHECK CLINIC STATUS
-
-       This means a clinic that is disabled by Super Admin
-       cannot continue using an old session indefinitely.
-    ===================================================== */
-
     if (
       u.system_role !== "super_admin"
     ) {
@@ -654,17 +534,6 @@ r.get(
     const clinic =
       buildClinic(u);
 
-    /*
-     * Keep /me compatible with both response styles:
-     *
-     * data.name
-     * data.clinic
-     *
-     * AND
-     *
-     * data.user.name
-     * data.user.clinic
-     */
     const user = {
       id: u.id,
 
@@ -689,6 +558,12 @@ r.get(
       last_login_at:
         u.last_login_at,
 
+      recovery_email:
+        u.recovery_email,
+
+      recovery_email_verified_at:
+        u.recovery_email_verified_at,
+
       clinic,
     };
 
@@ -701,8 +576,743 @@ r.get(
     });
   })
 );
+
 /* =========================================================
-   CHANGE PASSWORD
+   SECURITY EMAIL + PASSWORD HELPERS
+========================================================= */
+
+const TOKEN_MINUTES = 15;
+
+function getAppUrl() {
+  return (
+    process.env.APP_URL ||
+    process.env.FRONTEND_URL ||
+    "http://localhost:5173"
+  ).replace(/\/+$/, "");
+}
+
+function createTokenPair() {
+  const raw =
+    crypto
+      .randomBytes(32)
+      .toString("hex");
+
+  const hash =
+    crypto
+      .createHash("sha256")
+      .update(raw)
+      .digest("hex");
+
+  return {
+    raw,
+    hash,
+  };
+}
+
+function hashToken(raw) {
+  return crypto
+    .createHash("sha256")
+    .update(raw)
+    .digest("hex");
+}
+
+async function getSecurityUser(id) {
+  const { rows } =
+    await pool.query(
+      `
+        SELECT
+          id,
+          full_name,
+          email,
+          password_hash,
+          clinic_id,
+          active,
+          recovery_email,
+          recovery_email_verified_at
+
+        FROM users
+
+        WHERE id = $1
+
+        LIMIT 1
+      `,
+      [id]
+    );
+
+  return rows[0];
+}
+
+/* =========================================================
+   RESEND EMAIL
+========================================================= */
+
+async function sendMail(
+  to,
+  subject,
+  html
+) {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error(
+      "RESEND_API_KEY is not configured"
+    );
+  }
+
+  const response =
+    await fetch(
+      "https://api.resend.com/emails",
+      {
+        method: "POST",
+
+        headers: {
+          Authorization:
+            `Bearer ${process.env.RESEND_API_KEY}`,
+
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify({
+          from:
+            process.env.EMAIL_FROM ||
+            "The Dental Lounge <onboarding@resend.dev>",
+
+          to: [to],
+
+          subject,
+
+          html,
+        }),
+      }
+    );
+
+  if (!response.ok) {
+    const errorBody =
+      await response.text();
+
+    console.error(
+      "Resend email error:",
+      errorBody
+    );
+
+    throw new Error(
+      "Verification email could not be sent"
+    );
+  }
+}
+
+function verificationEmail(
+  title,
+  message,
+  buttonText,
+  url
+) {
+  return `
+    <div
+      style="
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: auto;
+        padding: 24px;
+        color: #172033;
+      "
+    >
+      <h2 style="color:#0e7f86;">
+        ${title}
+      </h2>
+
+      <p>
+        ${message}
+      </p>
+
+      <p style="margin:28px 0;">
+        <a
+          href="${url}"
+          style="
+            background:#0e7f86;
+            color:#ffffff;
+            padding:12px 20px;
+            border-radius:8px;
+            text-decoration:none;
+            display:inline-block;
+          "
+        >
+          ${buttonText}
+        </a>
+      </p>
+
+      <p>
+        This is a one-time confirmation link.
+        It expires in ${TOKEN_MINUTES} minutes.
+      </p>
+
+      <p>
+        If you did not request this action,
+        ignore this email.
+      </p>
+
+      <p>
+        The Dental Lounge
+      </p>
+    </div>
+  `;
+}
+
+/* =========================================================
+   SECURITY EMAIL STATUS
+========================================================= */
+
+r.get(
+  "/security-email",
+
+  auth,
+
+  asyncHandler(async (req, res) => {
+    const user =
+      await getSecurityUser(
+        req.user.id
+      );
+
+    if (
+      !user ||
+      !user.active
+    ) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "User not found or inactive",
+        });
+    }
+
+    return res.json({
+      recovery_email:
+        user.recovery_email || null,
+
+      verified:
+        Boolean(
+          user.recovery_email &&
+          user.recovery_email_verified_at
+        ),
+
+      recovery_email_verified_at:
+        user.recovery_email_verified_at ||
+        null,
+    });
+  })
+);
+
+/* =========================================================
+   FIRST TIME SECURITY EMAIL
+========================================================= */
+
+r.post(
+  "/security-email/request-add",
+
+  auth,
+
+  asyncHandler(async (req, res) => {
+    const p = z
+      .object({
+        email: z
+          .string()
+          .trim()
+          .email(),
+      })
+      .parse(req.body);
+
+    const user =
+      await getSecurityUser(
+        req.user.id
+      );
+
+    if (
+      !user ||
+      !user.active
+    ) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "User not found or inactive",
+        });
+    }
+
+    /*
+     * If an already verified security email
+     * exists, user cannot simply overwrite it.
+     *
+     * Old email must approve removal first.
+     */
+    if (
+      user.recovery_email &&
+      user.recovery_email_verified_at
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Security email is already verified. Verify removal before adding a new email.",
+        });
+    }
+
+    const token =
+      createTokenPair();
+
+    /*
+     * Remove previous unused add-email requests.
+     */
+    await pool.query(
+      `
+        DELETE FROM security_email_requests
+
+        WHERE user_id = $1
+
+          AND action = 'add_email'
+
+          AND confirmed_at IS NULL
+      `,
+      [user.id]
+    );
+
+    /*
+     * Only the SHA-256 token hash is stored.
+     * Raw token only exists in the email link.
+     */
+    await pool.query(
+      `
+        INSERT INTO security_email_requests
+        (
+          user_id,
+          action,
+          new_email,
+          token_hash,
+          expires_at
+        )
+
+        VALUES
+        (
+          $1,
+          'add_email',
+          $2,
+          $3,
+          NOW() + INTERVAL '15 minutes'
+        )
+      `,
+      [
+        user.id,
+        p.email.toLowerCase(),
+        token.hash,
+      ]
+    );
+
+    const url =
+      `${getAppUrl()}` +
+      `/api/auth/security-email/confirm-add` +
+      `?token=${encodeURIComponent(token.raw)}`;
+
+    await sendMail(
+      p.email.toLowerCase(),
+
+      "Verify your security email",
+
+      verificationEmail(
+        "Verify Security Email",
+
+        "Confirm this email address to protect password changes on your account.",
+
+        "Verify Security Email",
+
+        url
+      )
+    );
+
+    return res.json({
+      message:
+        "Verification email sent. Confirm it to activate your security email.",
+    });
+  })
+);
+
+/* =========================================================
+   CONFIRM FIRST TIME / NEW SECURITY EMAIL
+========================================================= */
+
+r.get(
+  "/security-email/confirm-add",
+
+  asyncHandler(async (req, res) => {
+    const rawToken = z
+      .string()
+      .min(20)
+      .parse(req.query.token);
+
+    const tokenHash =
+      hashToken(rawToken);
+
+    const client =
+      await pool.connect();
+
+    try {
+      await client.query(
+        "BEGIN"
+      );
+
+      const { rows } =
+        await client.query(
+          `
+            SELECT
+              id,
+              user_id,
+              new_email
+
+            FROM security_email_requests
+
+            WHERE token_hash = $1
+
+              AND action = 'add_email'
+
+              AND confirmed_at IS NULL
+
+              AND expires_at > NOW()
+
+            FOR UPDATE
+          `,
+          [tokenHash]
+        );
+
+      const request =
+        rows[0];
+
+      if (!request) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .send(
+            "This verification link is invalid or expired."
+          );
+      }
+
+      const updated =
+        await client.query(
+          `
+            UPDATE users
+
+            SET
+              recovery_email = $1,
+
+              recovery_email_verified_at =
+                NOW(),
+
+              updated_at = NOW()
+
+            WHERE id = $2
+
+              AND active = TRUE
+
+            RETURNING id
+          `,
+          [
+            request.new_email
+              .toLowerCase(),
+
+            request.user_id,
+          ]
+        );
+
+      if (!updated.rows[0]) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .send(
+            "This user account is no longer active."
+          );
+      }
+
+      await client.query(
+        `
+          UPDATE security_email_requests
+
+          SET
+            confirmed_at = NOW()
+
+          WHERE id = $1
+        `,
+        [request.id]
+      );
+
+      await client.query(
+        "COMMIT"
+      );
+
+      return res.send(
+        "Security email verified successfully. You can close this page and return to The Dental Lounge."
+      );
+    } catch (error) {
+      await client.query(
+        "ROLLBACK"
+      );
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+/* =========================================================
+   REQUEST SECURITY EMAIL REMOVAL / CHANGE
+
+   IMPORTANT:
+   Confirmation goes to CURRENT verified email first.
+========================================================= */
+
+r.post(
+  "/security-email/request-removal",
+
+  auth,
+
+  asyncHandler(async (req, res) => {
+    const user =
+      await getSecurityUser(
+        req.user.id
+      );
+
+    if (
+      !user ||
+      !user.active
+    ) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "User not found or inactive",
+        });
+    }
+
+    if (
+      !user.recovery_email ||
+      !user.recovery_email_verified_at
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "No verified security email is set",
+        });
+    }
+
+    const token =
+      createTokenPair();
+
+    /*
+     * Delete any previous unused removal request.
+     */
+    await pool.query(
+      `
+        DELETE FROM security_email_requests
+
+        WHERE user_id = $1
+
+          AND action = 'remove_email'
+
+          AND confirmed_at IS NULL
+      `,
+      [user.id]
+    );
+
+    await pool.query(
+      `
+        INSERT INTO security_email_requests
+        (
+          user_id,
+          action,
+          token_hash,
+          expires_at
+        )
+
+        VALUES
+        (
+          $1,
+          'remove_email',
+          $2,
+          NOW() + INTERVAL '15 minutes'
+        )
+      `,
+      [
+        user.id,
+        token.hash,
+      ]
+    );
+
+    const url =
+      `${getAppUrl()}` +
+      `/api/auth/security-email/confirm-removal` +
+      `?token=${encodeURIComponent(token.raw)}`;
+
+    await sendMail(
+      user.recovery_email,
+
+      "Confirm security email removal",
+
+      verificationEmail(
+        "Security Email Change",
+
+        "A request was made to remove or change your security email. Confirm only if this was you.",
+
+        "Confirm Removal",
+
+        url
+      )
+    );
+
+    return res.json({
+      message:
+        "Confirmation sent to your current security email.",
+    });
+  })
+);
+
+/* =========================================================
+   CONFIRM SECURITY EMAIL REMOVAL
+========================================================= */
+
+r.get(
+  "/security-email/confirm-removal",
+
+  asyncHandler(async (req, res) => {
+    const rawToken = z
+      .string()
+      .min(20)
+      .parse(req.query.token);
+
+    const tokenHash =
+      hashToken(rawToken);
+
+    const client =
+      await pool.connect();
+
+    try {
+      await client.query(
+        "BEGIN"
+      );
+
+      const { rows } =
+        await client.query(
+          `
+            SELECT
+              id,
+              user_id
+
+            FROM security_email_requests
+
+            WHERE token_hash = $1
+
+              AND action =
+                'remove_email'
+
+              AND confirmed_at
+                IS NULL
+
+              AND expires_at > NOW()
+
+            FOR UPDATE
+          `,
+          [tokenHash]
+        );
+
+      const request =
+        rows[0];
+
+      if (!request) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .send(
+            "This confirmation link is invalid or expired."
+          );
+      }
+
+      const updated =
+        await client.query(
+          `
+            UPDATE users
+
+            SET
+              recovery_email = NULL,
+
+              recovery_email_verified_at =
+                NULL,
+
+              updated_at = NOW()
+
+            WHERE id = $1
+
+              AND active = TRUE
+
+            RETURNING id
+          `,
+          [request.user_id]
+        );
+
+      if (!updated.rows[0]) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .send(
+            "This user account is no longer active."
+          );
+      }
+
+      await client.query(
+        `
+          UPDATE security_email_requests
+
+          SET
+            confirmed_at = NOW()
+
+          WHERE id = $1
+        `,
+        [request.id]
+      );
+
+      await client.query(
+        "COMMIT"
+      );
+
+      return res.send(
+        "Security email removal confirmed. Return to The Dental Lounge and add your new security email."
+      );
+    } catch (error) {
+      await client.query(
+        "ROLLBACK"
+      );
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+/* =========================================================
+   REQUEST PASSWORD CHANGE
+
+   NO CURRENT PASSWORD REQUIRED.
+
+   New password is bcrypt hashed and remains pending.
+   Current password remains active until email confirmation.
 ========================================================= */
 
 r.put(
@@ -713,93 +1323,343 @@ r.put(
   asyncHandler(async (req, res) => {
     const p = z
       .object({
-        current_password: z
-          .string()
-          .min(8, "Current password is required"),
-
         new_password: z
           .string()
-          .min(8, "New password must be at least 8 characters"),
+          .min(
+            8,
+            "New password must be at least 8 characters"
+          ),
 
         confirm_password: z
           .string()
-          .min(8, "Confirm password is required"),
+          .min(
+            8,
+            "Confirm password is required"
+          ),
       })
       .refine(
         (data) =>
-          data.new_password === data.confirm_password,
-        {
-          message: "New passwords do not match",
-          path: ["confirm_password"],
-        }
-      )
-      .refine(
-        (data) =>
-          data.current_password !== data.new_password,
+          data.new_password ===
+          data.confirm_password,
+
         {
           message:
-            "New password must be different from current password",
-          path: ["new_password"],
+            "New passwords do not match",
+
+          path: [
+            "confirm_password",
+          ],
         }
       )
       .parse(req.body);
 
-    const { rows } = await pool.query(
-      `
-        SELECT
-          id,
-          password_hash,
-          active
-        FROM users
-        WHERE id = $1
-        LIMIT 1
-      `,
-      [req.user.id]
-    );
+    const user =
+      await getSecurityUser(
+        req.user.id
+      );
 
-    const user = rows[0];
-
-    if (!user || !user.active) {
-      return res.status(401).json({
-        message: "User not found or inactive",
-      });
+    if (
+      !user ||
+      !user.active
+    ) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "User not found or inactive",
+        });
     }
 
-    const currentPasswordCorrect =
+    /*
+     * Password change cannot proceed until
+     * security email is verified.
+     */
+    if (
+      !user.recovery_email ||
+      !user.recovery_email_verified_at
+    ) {
+      return res
+        .status(400)
+        .json({
+          code:
+            "SECURITY_EMAIL_REQUIRED",
+
+          message:
+            "Add and verify a security email before changing your password.",
+        });
+    }
+
+    /*
+     * New password cannot equal current password.
+     * User does NOT need to enter current password.
+     */
+    const samePassword =
       await bcrypt.compare(
-        p.current_password,
+        p.new_password,
         user.password_hash
       );
 
-    if (!currentPasswordCorrect) {
-      return res.status(400).json({
-        message: "Current password is incorrect",
-      });
+    if (samePassword) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "New password must be different from your current password",
+        });
     }
 
+    /*
+     * Hash pending new password immediately.
+     * Plain password is never stored.
+     */
     const newPasswordHash =
       await bcrypt.hash(
         p.new_password,
         12
       );
 
+    const token =
+      createTokenPair();
+
+    /*
+     * Reject previous pending password-change
+     * requests for this user.
+     */
     await pool.query(
       `
-        UPDATE users
+        UPDATE password_change_requests
+
         SET
-          password_hash = $1,
-          updated_at = NOW()
-        WHERE id = $2
+          rejected_at = NOW()
+
+        WHERE user_id = $1
+
+          AND confirmed_at IS NULL
+
+          AND rejected_at IS NULL
+      `,
+      [user.id]
+    );
+
+    /*
+     * Store only:
+     * - bcrypt password hash
+     * - SHA-256 confirmation token hash
+     */
+    await pool.query(
+      `
+        INSERT INTO password_change_requests
+        (
+          user_id,
+          clinic_id,
+          new_password_hash,
+          token_hash,
+          expires_at
+        )
+
+        VALUES
+        (
+          $1,
+          $2,
+          $3,
+          $4,
+          NOW() + INTERVAL '15 minutes'
+        )
       `,
       [
+        user.id,
+        user.clinic_id,
         newPasswordHash,
-        req.user.id,
+        token.hash,
       ]
     );
 
+    const url =
+      `${getAppUrl()}` +
+      `/api/auth/confirm-password-change` +
+      `?token=${encodeURIComponent(token.raw)}`;
+
+    await sendMail(
+      user.recovery_email,
+
+      "Confirm your password change",
+
+      verificationEmail(
+        "Confirm Password Change",
+
+        "A new password was requested for your account. Your existing password remains active until you confirm this request.",
+
+        "Confirm Password Change",
+
+        url
+      )
+    );
+
     return res.json({
-      message: "Password changed successfully",
+      message:
+        "Confirmation email sent. Your current password remains active until you confirm the change.",
     });
+  })
+);
+
+/* =========================================================
+   CONFIRM PASSWORD CHANGE
+========================================================= */
+
+r.get(
+  "/confirm-password-change",
+
+  asyncHandler(async (req, res) => {
+    const rawToken = z
+      .string()
+      .min(20)
+      .parse(req.query.token);
+
+    const tokenHash =
+      hashToken(rawToken);
+
+    const client =
+      await pool.connect();
+
+    try {
+      await client.query(
+        "BEGIN"
+      );
+
+      const { rows } =
+        await client.query(
+          `
+            SELECT
+              id,
+              user_id,
+              new_password_hash
+
+            FROM password_change_requests
+
+            WHERE token_hash = $1
+
+              AND confirmed_at
+                IS NULL
+
+              AND rejected_at
+                IS NULL
+
+              AND expires_at > NOW()
+
+            FOR UPDATE
+          `,
+          [tokenHash]
+        );
+
+      const request =
+        rows[0];
+
+      if (!request) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .send(
+            "This password confirmation link is invalid or expired."
+          );
+      }
+
+      /*
+       * Password is updated ONLY here,
+       * after email confirmation.
+       */
+      const updated =
+        await client.query(
+          `
+            UPDATE users
+
+            SET
+              password_hash = $1,
+
+              updated_at = NOW()
+
+            WHERE id = $2
+
+              AND active = TRUE
+
+            RETURNING id
+          `,
+          [
+            request.new_password_hash,
+            request.user_id,
+          ]
+        );
+
+      if (!updated.rows[0]) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .send(
+            "This user account is no longer active."
+          );
+      }
+
+      /*
+       * Mark this request used.
+       */
+      await client.query(
+        `
+          UPDATE password_change_requests
+
+          SET
+            confirmed_at = NOW()
+
+          WHERE id = $1
+        `,
+        [request.id]
+      );
+
+      /*
+       * Reject any other pending password
+       * change request for the same user.
+       */
+      await client.query(
+        `
+          UPDATE password_change_requests
+
+          SET
+            rejected_at = NOW()
+
+          WHERE user_id = $1
+
+            AND id <> $2
+
+            AND confirmed_at IS NULL
+
+            AND rejected_at IS NULL
+        `,
+        [
+          request.user_id,
+          request.id,
+        ]
+      );
+
+      await client.query(
+        "COMMIT"
+      );
+
+      return res.send(
+        "Password changed successfully. You can close this page and sign in with your new password."
+      );
+    } catch (error) {
+      await client.query(
+        "ROLLBACK"
+      );
+
+      throw error;
+    } finally {
+      client.release();
+    }
   })
 );
 

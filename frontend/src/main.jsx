@@ -29,6 +29,7 @@ import {
   Building2,
   ShieldCheck,
   ArrowLeft,
+  RefreshCw,
   ChevronLeft,
   ChevronRight,
   UserPlus,
@@ -444,6 +445,9 @@ function Login() {
   const [password, setPassword] =
     useState("");
 
+  const [showLoginPassword, setShowLoginPassword] =
+    useState(false);
+
   const [error, setError] =
     useState("");
 
@@ -530,16 +534,37 @@ function Login() {
 
         <label>Password</label>
 
-        <input
-          type="password"
-          value={password}
-          autoComplete="current-password"
-          onChange={(e) =>
-            setPassword(e.target.value)
-          }
-          placeholder="Enter password"
-          required
-        />
+        <div className="password-input-wrap">
+          <input
+            type={showLoginPassword ? "text" : "password"}
+            value={password}
+            autoComplete="current-password"
+            onChange={(e) =>
+              setPassword(e.target.value)
+            }
+            placeholder="Enter password"
+            required
+          />
+
+          <button
+            type="button"
+            className="password-eye"
+            onClick={() =>
+              setShowLoginPassword(!showLoginPassword)
+            }
+            aria-label={
+              showLoginPassword
+                ? "Hide password"
+                : "Show password"
+            }
+          >
+            {showLoginPassword ? (
+              <EyeOff size={18} />
+            ) : (
+              <Eye size={18} />
+            )}
+          </button>
+        </div>
 
         <button
           className="btn primary full"
@@ -913,6 +938,107 @@ function Shell() {
           background: var(--clinic-unpaid) !important;
           border-color: var(--clinic-unpaid) !important;
         }
+
+        .global-action-footer {
+          position: fixed;
+          left: 280px;
+          right: 18px;
+          bottom: 14px;
+          z-index: 1200;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          pointer-events: none;
+        }
+
+        .global-action-footer-left,
+        .global-action-footer-right {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          pointer-events: auto;
+        }
+
+        .global-footer-btn {
+          min-height: 42px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          border-radius: 12px;
+          padding: 9px 13px;
+          border: 1px solid rgba(15, 23, 42, 0.14);
+          background: var(--clinic-card-bg) !important;
+          color: var(--clinic-text) !important;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .global-footer-btn:hover {
+          border-color: var(--clinic-primary) !important;
+        }
+
+        .global-footer-btn.logout {
+          background: var(--clinic-danger-button) !important;
+          border-color: var(--clinic-danger-button) !important;
+          color: var(--clinic-danger-button-text) !important;
+        }
+
+        .main-content {
+          padding-bottom: 82px !important;
+        }
+
+        @media (max-width: 900px) {
+          .global-action-footer {
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            align-items: stretch;
+            gap: 7px;
+          }
+
+          .global-action-footer-left {
+            flex: 0 0 auto;
+          }
+
+          .global-action-footer-right {
+            flex: 1;
+            justify-content: flex-end;
+          }
+
+          .global-footer-btn {
+            min-width: 44px;
+            padding: 9px 10px;
+          }
+
+          .global-footer-btn .footer-label {
+            display: none;
+          }
+
+          .global-action-footer-left .global-footer-btn .footer-label {
+            display: inline;
+          }
+
+          .main-content {
+            padding-bottom: 78px !important;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .global-action-footer-left .global-footer-btn .footer-label {
+            display: none;
+          }
+
+          .global-action-footer {
+            justify-content: center;
+          }
+
+          .global-action-footer-right {
+            flex: 0 1 auto;
+          }
+        }
       `}</style>
       <aside className="sidebar">
         <div className="sidebar-brand">
@@ -1078,6 +1204,59 @@ function Shell() {
         </Routes>
       </main>
 
+      <div
+        className="global-action-footer"
+        role="navigation"
+        aria-label="Global page actions"
+      >
+        <div className="global-action-footer-left">
+          <button
+            type="button"
+            className="global-footer-btn"
+            onClick={() => setShowPassword(true)}
+            title="Change Password"
+          >
+            <KeyRound size={18} />
+            <span className="footer-label">Change Password</span>
+          </button>
+        </div>
+
+        <div className="global-action-footer-right">
+          <button
+            type="button"
+            className="global-footer-btn"
+            onClick={() => navigate("/")}
+            title="Return to Dashboard"
+          >
+            <ArrowLeft size={18} />
+            <span className="footer-label">Return</span>
+          </button>
+
+          <button
+            type="button"
+            className="global-footer-btn"
+            onClick={() => {
+              navigate("/");
+              window.setTimeout(() => window.location.reload(), 0);
+            }}
+            title="Refresh and go to Dashboard"
+          >
+            <RefreshCw size={18} />
+            <span className="footer-label">Refresh</span>
+          </button>
+
+          <button
+            type="button"
+            className="global-footer-btn logout"
+            onClick={logout}
+            title="Logout"
+          >
+            <LogOut size={18} />
+            <span className="footer-label">Logout</span>
+          </button>
+        </div>
+      </div>
+
       {showPassword && (
         <ChangePasswordModal
           onClose={() =>
@@ -1095,13 +1274,10 @@ function Shell() {
 
 function ChangePasswordModal({ onClose }) {
   const [form, setForm] = useState({
-    current_password: "",
     new_password: "",
     confirm_password: "",
   });
 
-  const [showCurrent, setShowCurrent] =
-    useState(false);
   const [showNew, setShowNew] =
     useState(false);
   const [showConfirm, setShowConfirm] =
@@ -1138,11 +1314,10 @@ function ChangePasswordModal({ onClose }) {
         type: "success",
         message:
           data?.message ||
-          "Password changed successfully",
+          "Confirmation email sent. Password will change after confirmation.",
       });
 
       setForm({
-        current_password: "",
         new_password: "",
         confirm_password: "",
       });
@@ -1214,16 +1389,6 @@ function ChangePasswordModal({ onClose }) {
       <form onSubmit={submit}>
         <div className="form-grid">
           <PasswordField
-            label="Current Password *"
-            name="current_password"
-            visible={showCurrent}
-            onToggle={() =>
-              setShowCurrent(!showCurrent)
-            }
-            autoComplete="current-password"
-          />
-
-          <PasswordField
             label="New Password *"
             name="new_password"
             visible={showNew}
@@ -1249,8 +1414,8 @@ function ChangePasswordModal({ onClose }) {
           busy={saving}
           text={
             saving
-              ? "Changing..."
-              : "Change Password"
+              ? "Sending..."
+              : "Send Confirmation Email"
           }
         />
       </form>
