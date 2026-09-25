@@ -3008,3 +3008,55 @@ input[type="color"] {
       static !important;
   }
 }
+
+
+/* =========================================================
+   CHANGE PASSWORD + CLEAR NOTICES
+========================================================= */
+
+.password-input-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.password-input-wrap input {
+  padding-right: 46px !important;
+}
+
+.password-eye {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  color: var(--ink-2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.password-eye:hover {
+  color: var(--brand-dark);
+  background: rgba(14,127,134,.08);
+}
+
+.notice {
+  font-weight: 700;
+}
+
+.notice-left {
+  min-width: 0;
+}
+
+.notice-left span {
+  overflow-wrap: anywhere;
+}
+
+.notice .icon-btn {
+  flex: 0 0 34px;
+}

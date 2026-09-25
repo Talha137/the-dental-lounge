@@ -35,6 +35,9 @@ import {
   Palette,
   Save,
   Image as ImageIcon,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 import api from "./services/api";
@@ -562,6 +565,9 @@ function Shell() {
     () => getStoredUser()
   );
 
+  const [showPassword, setShowPassword] =
+    useState(false);
+
   const clinic = getClinicBrand();
 
   useEffect(() => {
@@ -828,13 +834,20 @@ function Shell() {
         }
 
         .notice.success {
+          background: var(--clinic-success) !important;
           border-color: var(--clinic-success) !important;
           color: var(--clinic-success-text) !important;
         }
 
         .notice.error {
+          background: var(--clinic-error) !important;
           border-color: var(--clinic-error) !important;
           color: var(--clinic-error-text) !important;
+        }
+
+        .notice .icon-btn,
+        .notice .icon-btn:hover {
+          color: inherit !important;
         }
 
         .status-select.scheduled,
@@ -989,6 +1002,17 @@ function Shell() {
           </div>
 
           <button
+            type="button"
+            className="logout-btn"
+            onClick={() =>
+              setShowPassword(true)
+            }
+          >
+            <KeyRound size={18} />
+            Change Password
+          </button>
+
+          <button
             className="logout-btn"
             onClick={logout}
           >
@@ -1053,7 +1077,184 @@ function Shell() {
           />
         </Routes>
       </main>
+
+      {showPassword && (
+        <ChangePasswordModal
+          onClose={() =>
+            setShowPassword(false)
+          }
+        />
+      )}
     </div>
+  );
+}
+
+/* =========================================================
+   CHANGE PASSWORD
+========================================================= */
+
+function ChangePasswordModal({ onClose }) {
+  const [form, setForm] = useState({
+    current_password: "",
+    new_password: "",
+    confirm_password: "",
+  });
+
+  const [showCurrent, setShowCurrent] =
+    useState(false);
+  const [showNew, setShowNew] =
+    useState(false);
+  const [showConfirm, setShowConfirm] =
+    useState(false);
+  const [notice, setNotice] =
+    useState(null);
+  const [saving, setSaving] =
+    useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setNotice(null);
+
+    if (
+      form.new_password !==
+      form.confirm_password
+    ) {
+      setNotice({
+        type: "error",
+        message: "New passwords do not match",
+      });
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { data } = await api.put(
+        "/auth/change-password",
+        form
+      );
+
+      setNotice({
+        type: "success",
+        message:
+          data?.message ||
+          "Password changed successfully",
+      });
+
+      setForm({
+        current_password: "",
+        new_password: "",
+        confirm_password: "",
+      });
+    } catch (err) {
+      setNotice({
+        type: "error",
+        message: getError(err),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function PasswordField({
+    label,
+    name,
+    visible,
+    onToggle,
+    autoComplete,
+  }) {
+    return (
+      <Field label={label} full>
+        <div className="password-input-wrap">
+          <input
+            type={visible ? "text" : "password"}
+            value={form[name]}
+            minLength="8"
+            autoComplete={autoComplete}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                [name]: e.target.value,
+              })
+            }
+            required
+          />
+
+          <button
+            type="button"
+            className="password-eye"
+            onClick={onToggle}
+            aria-label={
+              visible
+                ? "Hide password"
+                : "Show password"
+            }
+          >
+            {visible ? (
+              <EyeOff size={18} />
+            ) : (
+              <Eye size={18} />
+            )}
+          </button>
+        </div>
+      </Field>
+    );
+  }
+
+  return (
+    <Modal
+      title="Change Password"
+      onClose={onClose}
+    >
+      <Notice
+        notice={notice}
+        onClose={() => setNotice(null)}
+      />
+
+      <form onSubmit={submit}>
+        <div className="form-grid">
+          <PasswordField
+            label="Current Password *"
+            name="current_password"
+            visible={showCurrent}
+            onToggle={() =>
+              setShowCurrent(!showCurrent)
+            }
+            autoComplete="current-password"
+          />
+
+          <PasswordField
+            label="New Password *"
+            name="new_password"
+            visible={showNew}
+            onToggle={() =>
+              setShowNew(!showNew)
+            }
+            autoComplete="new-password"
+          />
+
+          <PasswordField
+            label="Confirm New Password *"
+            name="confirm_password"
+            visible={showConfirm}
+            onToggle={() =>
+              setShowConfirm(!showConfirm)
+            }
+            autoComplete="new-password"
+          />
+        </div>
+
+        <FormActions
+          onCancel={onClose}
+          busy={saving}
+          text={
+            saving
+              ? "Changing..."
+              : "Change Password"
+          }
+        />
+      </form>
+    </Modal>
   );
 }
 

@@ -701,5 +701,106 @@ r.get(
     });
   })
 );
+/* =========================================================
+   CHANGE PASSWORD
+========================================================= */
+
+r.put(
+  "/change-password",
+
+  auth,
+
+  asyncHandler(async (req, res) => {
+    const p = z
+      .object({
+        current_password: z
+          .string()
+          .min(8, "Current password is required"),
+
+        new_password: z
+          .string()
+          .min(8, "New password must be at least 8 characters"),
+
+        confirm_password: z
+          .string()
+          .min(8, "Confirm password is required"),
+      })
+      .refine(
+        (data) =>
+          data.new_password === data.confirm_password,
+        {
+          message: "New passwords do not match",
+          path: ["confirm_password"],
+        }
+      )
+      .refine(
+        (data) =>
+          data.current_password !== data.new_password,
+        {
+          message:
+            "New password must be different from current password",
+          path: ["new_password"],
+        }
+      )
+      .parse(req.body);
+
+    const { rows } = await pool.query(
+      `
+        SELECT
+          id,
+          password_hash,
+          active
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [req.user.id]
+    );
+
+    const user = rows[0];
+
+    if (!user || !user.active) {
+      return res.status(401).json({
+        message: "User not found or inactive",
+      });
+    }
+
+    const currentPasswordCorrect =
+      await bcrypt.compare(
+        p.current_password,
+        user.password_hash
+      );
+
+    if (!currentPasswordCorrect) {
+      return res.status(400).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    const newPasswordHash =
+      await bcrypt.hash(
+        p.new_password,
+        12
+      );
+
+    await pool.query(
+      `
+        UPDATE users
+        SET
+          password_hash = $1,
+          updated_at = NOW()
+        WHERE id = $2
+      `,
+      [
+        newPasswordHash,
+        req.user.id,
+      ]
+    );
+
+    return res.json({
+      message: "Password changed successfully",
+    });
+  })
+);
 
 export default r;
