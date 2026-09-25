@@ -1126,25 +1126,6 @@ function Shell() {
                 "staff"}
             </span>
           </div>
-
-          <button
-            type="button"
-            className="logout-btn"
-            onClick={() =>
-              setShowPassword(true)
-            }
-          >
-            <KeyRound size={18} />
-            Change Password
-          </button>
-
-          <button
-            className="logout-btn"
-            onClick={logout}
-          >
-            <LogOut size={18} />
-            Logout
-          </button>
         </div>
       </aside>
 
@@ -1225,8 +1206,28 @@ function Shell() {
           <button
             type="button"
             className="global-footer-btn"
-            onClick={() => navigate("/")}
-            title="Return to Dashboard"
+            onClick={() => {
+              const modalClose = document.querySelector(
+                ".modal-backdrop .modal-header .icon-btn"
+              );
+
+              if (modalClose) {
+                modalClose.click();
+                return;
+              }
+
+              const path = window.location.pathname;
+
+              if (/^\/admin\/clinics\/[^/]+$/.test(path)) {
+                navigate("/admin/clinics");
+                return;
+              }
+
+              if (path !== "/") {
+                navigate("/");
+              }
+            }}
+            title="Return"
           >
             <ArrowLeft size={18} />
             <span className="footer-label">Return</span>
@@ -1236,8 +1237,7 @@ function Shell() {
             type="button"
             className="global-footer-btn"
             onClick={() => {
-              navigate("/");
-              window.setTimeout(() => window.location.reload(), 0);
+              window.location.assign("/");
             }}
             title="Refresh and go to Dashboard"
           >
@@ -1273,23 +1273,143 @@ function Shell() {
 ========================================================= */
 
 function ChangePasswordModal({ onClose }) {
+  const [security, setSecurity] = useState({
+    recovery_email: null,
+    verified: false,
+    recovery_email_verified_at: null,
+  });
+
+  const [email, setEmail] = useState("");
+  const [emailMode, setEmailMode] = useState(false);
+
   const [form, setForm] = useState({
     new_password: "",
     confirm_password: "",
   });
 
-  const [showNew, setShowNew] =
-    useState(false);
-  const [showConfirm, setShowConfirm] =
-    useState(false);
-  const [notice, setNotice] =
-    useState(null);
-  const [saving, setSaving] =
-    useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  async function submit(e) {
+  const [notice, setNotice] = useState(null);
+  const [loadingSecurity, setLoadingSecurity] = useState(true);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [removingEmail, setRemovingEmail] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  async function loadSecurityEmail() {
+    setLoadingSecurity(true);
+
+    try {
+      const { data } = await api.get("/auth/security-email");
+
+      setSecurity({
+        recovery_email: data?.recovery_email || null,
+        verified: Boolean(data?.verified),
+        recovery_email_verified_at:
+          data?.recovery_email_verified_at || null,
+      });
+
+      setEmailMode(!data?.verified);
+    } catch (err) {
+      setNotice({
+        type: "error",
+        message: getError(err),
+      });
+    } finally {
+      setLoadingSecurity(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSecurityEmail();
+  }, []);
+
+  async function addSecurityEmail(e) {
     e.preventDefault();
     setNotice(null);
+
+    if (!email.trim()) {
+      setNotice({
+        type: "error",
+        message: "Enter a security email address.",
+      });
+      return;
+    }
+
+    setSavingEmail(true);
+
+    try {
+      const { data } = await api.post(
+        "/auth/security-email/request-add",
+        {
+          email: email.trim(),
+        }
+      );
+
+      setNotice({
+        type: "success",
+        message:
+          data?.message ||
+          "Verification email sent. Open your email and confirm the verification link.",
+      });
+
+      setEmail("");
+    } catch (err) {
+      setNotice({
+        type: "error",
+        message: getError(err),
+      });
+    } finally {
+      setSavingEmail(false);
+    }
+  }
+
+  async function requestEmailChange() {
+    setNotice(null);
+
+    if (
+      !window.confirm(
+        `A confirmation email will be sent to ${security.recovery_email}. After you confirm it, the current security email will be removed and you can add a new one. Continue?`
+      )
+    ) {
+      return;
+    }
+
+    setRemovingEmail(true);
+
+    try {
+      const { data } = await api.post(
+        "/auth/security-email/request-removal"
+      );
+
+      setNotice({
+        type: "success",
+        message:
+          data?.message ||
+          "Confirmation sent to your current security email.",
+      });
+    } catch (err) {
+      setNotice({
+        type: "error",
+        message: getError(err),
+      });
+    } finally {
+      setRemovingEmail(false);
+    }
+  }
+
+  async function submitPassword(e) {
+    e.preventDefault();
+    setNotice(null);
+
+    if (!security.verified) {
+      setNotice({
+        type: "error",
+        message:
+          "Add and verify your security email before changing your password.",
+      });
+      return;
+    }
 
     if (
       form.new_password !==
@@ -1302,7 +1422,7 @@ function ChangePasswordModal({ onClose }) {
       return;
     }
 
-    setSaving(true);
+    setSavingPassword(true);
 
     try {
       const { data } = await api.put(
@@ -1314,7 +1434,7 @@ function ChangePasswordModal({ onClose }) {
         type: "success",
         message:
           data?.message ||
-          "Confirmation email sent. Password will change after confirmation.",
+          "Confirmation email sent. Password will change only after email confirmation.",
       });
 
       setForm({
@@ -1327,7 +1447,7 @@ function ChangePasswordModal({ onClose }) {
         message: getError(err),
       });
     } finally {
-      setSaving(false);
+      setSavingPassword(false);
     }
   }
 
@@ -1378,47 +1498,185 @@ function ChangePasswordModal({ onClose }) {
 
   return (
     <Modal
-      title="Change Password"
+      title="Account Security"
       onClose={onClose}
+      wide
     >
       <Notice
         notice={notice}
         onClose={() => setNotice(null)}
       />
 
-      <form onSubmit={submit}>
-        <div className="form-grid">
-          <PasswordField
-            label="New Password *"
-            name="new_password"
-            visible={showNew}
-            onToggle={() =>
-              setShowNew(!showNew)
-            }
-            autoComplete="new-password"
-          />
+      <div
+        style={{
+          display: "grid",
+          gap: 18,
+        }}
+      >
+        <div className="card" style={{ padding: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <strong>Security Email</strong>
 
-          <PasswordField
-            label="Confirm New Password *"
-            name="confirm_password"
-            visible={showConfirm}
-            onToggle={() =>
-              setShowConfirm(!showConfirm)
-            }
-            autoComplete="new-password"
-          />
+              <div
+                style={{
+                  color: "var(--clinic-muted-text)",
+                  marginTop: 4,
+                  fontSize: 13,
+                }}
+              >
+                {loadingSecurity
+                  ? "Checking security email..."
+                  : security.verified
+                    ? `${security.recovery_email} • Verified`
+                    : "No verified security email added yet."}
+              </div>
+            </div>
+
+            {!loadingSecurity &&
+              security.verified && (
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={requestEmailChange}
+                  disabled={removingEmail}
+                >
+                  {removingEmail
+                    ? "Sending..."
+                    : "Change Email"}
+                </button>
+              )}
+          </div>
+
+          {!loadingSecurity &&
+            !security.verified && (
+              <form onSubmit={addSecurityEmail}>
+                <div className="form-grid">
+                  <Field
+                    label="Security Email *"
+                    full
+                  >
+                    <input
+                      type="email"
+                      value={email}
+                      autoComplete="email"
+                      placeholder="Enter security email"
+                      onChange={(e) =>
+                        setEmail(e.target.value)
+                      }
+                      required
+                    />
+                  </Field>
+                </div>
+
+                <FormActions
+                  onCancel={() => {
+                    setEmail("");
+                    setEmailMode(false);
+                  }}
+                  busy={savingEmail}
+                  text={
+                    savingEmail
+                      ? "Sending..."
+                      : "Add Email"
+                  }
+                />
+              </form>
+            )}
+
+          {!loadingSecurity &&
+            security.verified && (
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 13,
+                  color: "var(--clinic-muted-text)",
+                }}
+              >
+                To change this email, confirmation is first sent to the current verified security email. After confirmation, add and verify the new email here.
+              </div>
+            )}
+
+          <button
+            type="button"
+            className="btn secondary"
+            style={{
+              marginTop: 12,
+            }}
+            onClick={loadSecurityEmail}
+            disabled={loadingSecurity}
+          >
+            <RefreshCw size={16} />
+            {loadingSecurity
+              ? "Checking..."
+              : "Check Verification Status"}
+          </button>
         </div>
 
-        <FormActions
-          onCancel={onClose}
-          busy={saving}
-          text={
-            saving
-              ? "Sending..."
-              : "Send Confirmation Email"
-          }
-        />
-      </form>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ marginBottom: 14 }}>
+            <strong>Change Password</strong>
+
+            <div
+              style={{
+                color: "var(--clinic-muted-text)",
+                marginTop: 4,
+                fontSize: 13,
+              }}
+            >
+              {security.verified
+                ? `Password confirmation will be sent to ${security.recovery_email}.`
+                : "Verify a security email first. Your current password remains unchanged until email confirmation."}
+            </div>
+          </div>
+
+          <form onSubmit={submitPassword}>
+            <div className="form-grid">
+              <PasswordField
+                label="New Password *"
+                name="new_password"
+                visible={showNew}
+                onToggle={() =>
+                  setShowNew(!showNew)
+                }
+                autoComplete="new-password"
+              />
+
+              <PasswordField
+                label="Confirm New Password *"
+                name="confirm_password"
+                visible={showConfirm}
+                onToggle={() =>
+                  setShowConfirm(!showConfirm)
+                }
+                autoComplete="new-password"
+              />
+            </div>
+
+            <FormActions
+              onCancel={onClose}
+              busy={
+                savingPassword ||
+                !security.verified
+              }
+              text={
+                savingPassword
+                  ? "Sending..."
+                  : "Send Password Confirmation"
+              }
+            />
+          </form>
+        </div>
+      </div>
     </Modal>
   );
 }
