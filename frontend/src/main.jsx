@@ -593,6 +593,8 @@ function Shell() {
   const [showPassword, setShowPassword] =
     useState(false);
 
+const [showMobileMenu, setShowMobileMenu] =
+  useState(false);
   const clinic = getClinicBrand();
 
   useEffect(() => {
@@ -1066,6 +1068,84 @@ function Shell() {
             padding-bottom: 70px !important;
           }
         }
+          /* Mobile three-dot actions menu */
+.mobile-actions-menu {
+  display: none;
+}
+
+@media (max-width: 680px) {
+  .global-action-footer {
+    display: none !important;
+  }
+
+  .mobile-actions-menu {
+    display: block;
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 2000;
+  }
+
+  .mobile-actions-trigger {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 12px;
+    background: var(--clinic-card-bg);
+    color: var(--clinic-text);
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.14);
+    font-size: 26px;
+    line-height: 1;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .mobile-actions-dropdown {
+    position: absolute;
+    top: 48px;
+    right: 0;
+    width: 210px;
+    padding: 7px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 14px;
+    background: var(--clinic-card-bg);
+    box-shadow: 0 14px 35px rgba(15, 23, 42, 0.2);
+    overflow: hidden;
+  }
+
+  .mobile-actions-dropdown button {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--clinic-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .mobile-actions-dropdown button:hover {
+    background: rgba(15, 23, 42, 0.06);
+  }
+
+  .mobile-actions-dropdown .mobile-actions-logout {
+    color: var(--clinic-danger-button);
+  }
+
+  .main-content {
+    padding-bottom: 85px !important;
+  }
+}
       `}</style>
       <aside className="sidebar">
         <div className="sidebar-brand">
@@ -1155,6 +1235,86 @@ function Shell() {
           </div>
         </div>
       </aside>
+{/* Mobile top-right actions menu */}
+<div className="mobile-actions-menu">
+  <button
+    type="button"
+    className="mobile-actions-trigger"
+    onClick={() => setShowMobileMenu((open) => !open)}
+    aria-label="Open actions menu"
+    aria-expanded={showMobileMenu}
+  >
+    ⋮
+  </button>
+
+  {showMobileMenu && (
+    <div className="mobile-actions-dropdown">
+      <button
+        type="button"
+        onClick={() => {
+          setShowMobileMenu(false);
+          setShowPassword(true);
+        }}
+      >
+        <KeyRound size={17} />
+        <span>Change Password</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setShowMobileMenu(false);
+
+          const modalClose = document.querySelector(
+            ".modal-backdrop .modal-header .icon-btn"
+          );
+
+          if (modalClose) {
+            modalClose.click();
+            return;
+          }
+
+          const path = window.location.pathname;
+
+          if (/^\/admin\/clinics\/[^/]+$/.test(path)) {
+            navigate("/admin/clinics");
+            return;
+          }
+
+          if (path !== "/") {
+            navigate("/");
+          }
+        }}
+      >
+        <ArrowLeft size={17} />
+        <span>Return</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setShowMobileMenu(false);
+          window.location.assign("/");
+        }}
+      >
+        <RefreshCw size={17} />
+        <span>Refresh</span>
+      </button>
+
+      <button
+        type="button"
+        className="mobile-actions-logout"
+        onClick={() => {
+          setShowMobileMenu(false);
+          logout();
+        }}
+      >
+        <LogOut size={17} />
+        <span>Logout</span>
+      </button>
+    </div>
+  )}
+</div>
 
       <main className="main-content">
         <Routes>
