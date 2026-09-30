@@ -82,61 +82,156 @@ function validateTreatment(body) {
 }
 
 /* =========================================================
-   GET ALL TREATMENTS
+   GET TREATMENTS / SEARCH / PAGINATION
 
-   SECURITY:
-   Only treatments belonging to logged-in clinic.
+   Query:
+   q, page, limit, from, to, sort, order
+
+   Backward compatibility:
+   Without pagination/filter params, returns an array.
 ========================================================= */
 
 r.get(
   "/",
   asyncHandler(async (req, res) => {
     const clinicId = getClinicId(req, res);
+    if (!clinicId) return;
 
-    if (!clinicId) {
-      return;
+    const search = String(req.query.q || "").trim();
+    const from = String(req.query.from || "").trim();
+    const to = String(req.query.to || "").trim();
+
+    const hasPaginationParams =
+      req.query.page !== undefined ||
+      req.query.limit !== undefined ||
+      req.query.sort !== undefined ||
+      req.query.order !== undefined ||
+      req.query.from !== undefined ||
+      req.query.to !== undefined;
+
+    const rawPage = Number.parseInt(String(req.query.page || "1"), 10);
+    const rawLimit = Number.parseInt(String(req.query.limit || "25"), 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(rawLimit, 100)
+        : 25;
+    const offset = (page - 1) * limit;
+
+    const allowedSorts = {
+      treatment_date: "t.treatment_date",
+      created_at: "t.created_at",
+      patient_name: "p.full_name",
+      fee: "t.fee",
+    };
+    const requestedSort = String(req.query.sort || "treatment_date").toLowerCase();
+    const sortColumn = allowedSorts[requestedSort] || allowedSorts.treatment_date;
+    const order =
+      String(req.query.order || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
+
+    const values = [clinicId];
+    const filters = [];
+
+    if (search) {
+      values.push(`%${search}%`);
+      const n = values.length;
+      filters.push(`(
+        COALESCE(p.full_name, '') ILIKE $${n}
+        OR COALESCE(p.patient_code, '') ILIKE $${n}
+        OR COALESCE(t.procedure, '') ILIKE $${n}
+        OR COALESCE(t.diagnosis, '') ILIKE $${n}
+        OR COALESCE(t.tooth_no, '') ILIKE $${n}
+        OR COALESCE(t.doctor_name_manual, '') ILIKE $${n}
+        OR COALESCE(u.full_name, '') ILIKE $${n}
+      )`);
     }
+
+    if (from) {
+      values.push(from);
+      filters.push(`t.treatment_date >= $${values.length}::date`);
+    }
+
+    if (to) {
+      values.push(to);
+      filters.push(`t.treatment_date <= $${values.length}::date`);
+    }
+
+    const whereExtra = filters.length ? `AND ${filters.join(" AND ")}` : "";
+
+    const countResult = await pool.query(
+      `
+        SELECT COUNT(*)::int AS total
+        FROM treatments t
+        JOIN patients p
+          ON p.id = t.patient_id
+         AND p.clinic_id = t.clinic_id
+        LEFT JOIN users u
+          ON u.id = t.doctor_id
+         AND u.clinic_id = t.clinic_id
+        WHERE t.clinic_id = $1
+        ${whereExtra}
+      `,
+      values
+    );
+
+    const total = Number(countResult.rows[0]?.total || 0);
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+    const dataValues = [...values, limit, offset];
+    const limitParam = `$${dataValues.length - 1}`;
+    const offsetParam = `$${dataValues.length}`;
 
     const { rows } = await pool.query(
       `
-      SELECT
-        t.*,
-
-        p.full_name AS patient_name,
-        p.patient_code,
-        p.phone AS patient_phone,
-        p.gender AS patient_gender,
-        p.date_of_birth AS patient_date_of_birth,
-        p.allergies,
-        p.medical_history,
-
-        COALESCE(
-          NULLIF(t.doctor_name_manual, ''),
-          u.full_name
-        ) AS doctor_name
-
-      FROM treatments t
-
-      JOIN patients p
-        ON p.id = t.patient_id
-       AND p.clinic_id = t.clinic_id
-
-      LEFT JOIN users u
-        ON u.id = t.doctor_id
-       AND u.clinic_id = t.clinic_id
-
-      WHERE t.clinic_id = $1
-
-      ORDER BY
-        t.treatment_date DESC,
-        t.created_at DESC
-
-      LIMIT 500
+        SELECT
+          t.*,
+          p.full_name AS patient_name,
+          p.patient_code,
+          p.phone AS patient_phone,
+          p.gender AS patient_gender,
+          p.date_of_birth AS patient_date_of_birth,
+          p.allergies,
+          p.medical_history,
+          COALESCE(
+            NULLIF(t.doctor_name_manual, ''),
+            u.full_name
+          ) AS doctor_name
+        FROM treatments t
+        JOIN patients p
+          ON p.id = t.patient_id
+         AND p.clinic_id = t.clinic_id
+        LEFT JOIN users u
+          ON u.id = t.doctor_id
+         AND u.clinic_id = t.clinic_id
+        WHERE t.clinic_id = $1
+        ${whereExtra}
+        ORDER BY ${sortColumn} ${order} NULLS LAST, t.created_at DESC, t.id DESC
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}
       `,
-      [clinicId]
+      dataValues
     );
 
-    res.json(rows);
+    if (!hasPaginationParams) {
+      return res.json(rows.slice(0, 100));
+    }
+
+    res.json({
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+        has_previous_page: page > 1,
+        has_next_page: page < totalPages,
+      },
+      search,
+      sort: Object.prototype.hasOwnProperty.call(allowedSorts, requestedSort)
+        ? requestedSort
+        : "treatment_date",
+      order: order.toLowerCase(),
+    });
   })
 );
 

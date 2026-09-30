@@ -111,111 +111,280 @@ async function refreshInvoiceStatus(
 }
 
 /* =========================================================
-   GET ALL INVOICES
+   GET INVOICES / SEARCH / PAGINATION
 
-   SECURITY:
-   Only invoices belonging to logged-in clinic.
+   Query:
+   q, page, limit, status, sort, order
+
+   Backward compatibility:
+   Without pagination/filter params, returns an array.
 ========================================================= */
 
 r.get(
   "/",
   asyncHandler(async (req, res) => {
     const clinicId = getClinicId(req, res);
+    if (!clinicId) return;
 
-    if (!clinicId) {
-      return;
+    const search = String(req.query.q || "").trim();
+    const status = String(req.query.status || "").trim().toLowerCase();
+
+    const hasPaginationParams =
+      req.query.page !== undefined ||
+      req.query.limit !== undefined ||
+      req.query.sort !== undefined ||
+      req.query.order !== undefined ||
+      req.query.status !== undefined;
+
+    const rawPage = Number.parseInt(String(req.query.page || "1"), 10);
+    const rawLimit = Number.parseInt(String(req.query.limit || "25"), 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(rawLimit, 100)
+        : 25;
+    const offset = (page - 1) * limit;
+
+    const allowedStatuses = ["unpaid", "partial", "paid", "cancelled"];
+    if (status && !allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid invoice status." });
     }
+
+    const allowedSorts = {
+      created_at: "i.created_at",
+      patient_name: "p.full_name",
+      invoice_no: "i.invoice_no",
+      total: "i.total",
+      status: "i.status",
+    };
+    const requestedSort = String(req.query.sort || "created_at").toLowerCase();
+    const sortColumn = allowedSorts[requestedSort] || allowedSorts.created_at;
+    const order =
+      String(req.query.order || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
+
+    const values = [clinicId];
+    const filters = [];
+
+    if (search) {
+      values.push(`%${search}%`);
+      const n = values.length;
+      filters.push(`(
+        COALESCE(p.full_name, '') ILIKE $${n}
+        OR COALESCE(p.patient_code, '') ILIKE $${n}
+        OR COALESCE(p.phone, '') ILIKE $${n}
+        OR COALESCE(i.invoice_no, '') ILIKE $${n}
+      )`);
+    }
+
+    if (status) {
+      values.push(status);
+      filters.push(`i.status = $${values.length}`);
+    }
+
+    const whereExtra = filters.length ? `AND ${filters.join(" AND ")}` : "";
+
+    const countResult = await pool.query(
+      `
+        SELECT COUNT(*)::int AS total
+        FROM invoices i
+        JOIN patients p
+          ON p.id = i.patient_id
+         AND p.clinic_id = i.clinic_id
+        WHERE i.clinic_id = $1
+        ${whereExtra}
+      `,
+      values
+    );
+
+    const total = Number(countResult.rows[0]?.total || 0);
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+    const dataValues = [...values, limit, offset];
+    const limitParam = `$${dataValues.length - 1}`;
+    const offsetParam = `$${dataValues.length}`;
 
     const { rows } = await pool.query(
       `
-      SELECT
-        i.*,
-
-        p.full_name AS patient_name,
-        p.patient_code,
-        p.phone AS patient_phone,
-
-        COALESCE(
-          SUM(py.amount),
-          0
-        ) AS paid,
-
-        GREATEST(
-          i.total
-          - COALESCE(i.discount, 0)
-          - COALESCE(SUM(py.amount), 0),
-          0
-        ) AS balance
-
-      FROM invoices i
-
-      JOIN patients p
-        ON p.id = i.patient_id
-       AND p.clinic_id = i.clinic_id
-
-      LEFT JOIN payments py
-        ON py.invoice_id = i.id
-       AND py.clinic_id = i.clinic_id
-
-      WHERE i.clinic_id = $1
-
-      GROUP BY
-        i.id,
-        p.id
-
-      ORDER BY
-        i.created_at DESC
+        SELECT
+          i.*,
+          p.full_name AS patient_name,
+          p.patient_code,
+          p.phone AS patient_phone,
+          COALESCE(SUM(py.amount), 0) AS paid,
+          GREATEST(
+            i.total
+            - COALESCE(i.discount, 0)
+            - COALESCE(SUM(py.amount), 0),
+            0
+          ) AS balance
+        FROM invoices i
+        JOIN patients p
+          ON p.id = i.patient_id
+         AND p.clinic_id = i.clinic_id
+        LEFT JOIN payments py
+          ON py.invoice_id = i.id
+         AND py.clinic_id = i.clinic_id
+        WHERE i.clinic_id = $1
+        ${whereExtra}
+        GROUP BY i.id, p.id
+        ORDER BY ${sortColumn} ${order} NULLS LAST, i.id DESC
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}
       `,
-      [clinicId]
+      dataValues
     );
 
-    res.json(rows);
+    if (!hasPaginationParams) {
+      return res.json(rows.slice(0, 100));
+    }
+
+    res.json({
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+        has_previous_page: page > 1,
+        has_next_page: page < totalPages,
+      },
+      search,
+      status: status || null,
+      sort: Object.prototype.hasOwnProperty.call(allowedSorts, requestedSort)
+        ? requestedSort
+        : "created_at",
+      order: order.toLowerCase(),
+    });
   })
 );
 
 /* =========================================================
-   GET PAYMENTS
+   GET PAYMENTS / SEARCH / PAGINATION
 
-   SECURITY:
-   Only payment history for logged-in clinic.
+   Query:
+   q, page, limit, sort, order
+
+   Backward compatibility:
+   Without pagination params, returns an array.
 ========================================================= */
 
 r.get(
   "/payments",
   asyncHandler(async (req, res) => {
     const clinicId = getClinicId(req, res);
+    if (!clinicId) return;
 
-    if (!clinicId) {
-      return;
+    const search = String(req.query.q || "").trim();
+
+    const hasPaginationParams =
+      req.query.page !== undefined ||
+      req.query.limit !== undefined ||
+      req.query.sort !== undefined ||
+      req.query.order !== undefined;
+
+    const rawPage = Number.parseInt(String(req.query.page || "1"), 10);
+    const rawLimit = Number.parseInt(String(req.query.limit || "25"), 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(rawLimit, 100)
+        : 25;
+    const offset = (page - 1) * limit;
+
+    const allowedSorts = {
+      paid_at: "py.paid_at",
+      amount: "py.amount",
+      patient_name: "p.full_name",
+      invoice_no: "i.invoice_no",
+    };
+    const requestedSort = String(req.query.sort || "paid_at").toLowerCase();
+    const sortColumn = allowedSorts[requestedSort] || allowedSorts.paid_at;
+    const order =
+      String(req.query.order || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
+
+    const values = [clinicId];
+    let searchSql = "";
+
+    if (search) {
+      values.push(`%${search}%`);
+      const n = values.length;
+      searchSql = `
+        AND (
+          COALESCE(p.full_name, '') ILIKE $${n}
+          OR COALESCE(p.patient_code, '') ILIKE $${n}
+          OR COALESCE(i.invoice_no, '') ILIKE $${n}
+          OR COALESCE(py.reference, '') ILIKE $${n}
+          OR COALESCE(py.method, '') ILIKE $${n}
+        )
+      `;
     }
+
+    const countResult = await pool.query(
+      `
+        SELECT COUNT(*)::int AS total
+        FROM payments py
+        JOIN invoices i
+          ON i.id = py.invoice_id
+         AND i.clinic_id = py.clinic_id
+        JOIN patients p
+          ON p.id = py.patient_id
+         AND p.clinic_id = py.clinic_id
+        WHERE py.clinic_id = $1
+        ${searchSql}
+      `,
+      values
+    );
+
+    const total = Number(countResult.rows[0]?.total || 0);
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+    const dataValues = [...values, limit, offset];
+    const limitParam = `$${dataValues.length - 1}`;
+    const offsetParam = `$${dataValues.length}`;
 
     const { rows } = await pool.query(
       `
-      SELECT
-        py.*,
-        i.invoice_no,
-        p.full_name AS patient_name,
-        p.patient_code
-
-      FROM payments py
-
-      JOIN invoices i
-        ON i.id = py.invoice_id
-       AND i.clinic_id = py.clinic_id
-
-      JOIN patients p
-        ON p.id = py.patient_id
-       AND p.clinic_id = py.clinic_id
-
-      WHERE py.clinic_id = $1
-
-      ORDER BY
-        py.paid_at DESC
+        SELECT
+          py.*,
+          i.invoice_no,
+          p.full_name AS patient_name,
+          p.patient_code
+        FROM payments py
+        JOIN invoices i
+          ON i.id = py.invoice_id
+         AND i.clinic_id = py.clinic_id
+        JOIN patients p
+          ON p.id = py.patient_id
+         AND p.clinic_id = py.clinic_id
+        WHERE py.clinic_id = $1
+        ${searchSql}
+        ORDER BY ${sortColumn} ${order} NULLS LAST, py.id DESC
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}
       `,
-      [clinicId]
+      dataValues
     );
 
-    res.json(rows);
+    if (!hasPaginationParams) {
+      return res.json(rows.slice(0, 100));
+    }
+
+    res.json({
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+        has_previous_page: page > 1,
+        has_next_page: page < totalPages,
+      },
+      search,
+      sort: Object.prototype.hasOwnProperty.call(allowedSorts, requestedSort)
+        ? requestedSort
+        : "paid_at",
+      order: order.toLowerCase(),
+    });
   })
 );
 

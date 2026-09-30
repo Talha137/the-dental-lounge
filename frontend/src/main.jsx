@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 
 import api from "./services/api";
+import { ForgotPassword, ResetPassword } from "./AuthPages";
 import "./styles.css";
 
 /* =========================================================
@@ -567,6 +568,23 @@ function Login() {
         </div>
 
         <button
+          type="button"
+          className="login-forgot-link"
+          onClick={() => navigate("/forgot-password")}
+          style={{
+            border: 0,
+            background: "transparent",
+            color: "var(--brand, #0e7f86)",
+            fontWeight: 700,
+            cursor: "pointer",
+            padding: "4px 0 10px",
+            textAlign: "right",
+          }}
+        >
+          Forgot Password?
+        </button>
+
+        <button
           className="btn primary full"
           disabled={busy}
         >
@@ -590,11 +608,6 @@ function Shell() {
     () => getStoredUser()
   );
 
-  const [showPassword, setShowPassword] =
-    useState(false);
-
-const [showMobileMenu, setShowMobileMenu] =
-  useState(false);
   const clinic = getClinicBrand();
 
   useEffect(() => {
@@ -1146,6 +1159,117 @@ const [showMobileMenu, setShowMobileMenu] =
     padding-bottom: 85px !important;
   }
 }
+
+
+        /* Production application frame: fixed header/footer, scrollable workspace */
+        html, body, #root {
+          height: 100%;
+          overflow: hidden;
+        }
+
+        .app-shell {
+          height: 100dvh;
+          overflow: hidden;
+        }
+
+        .app-top-header {
+          position: fixed;
+          top: 0;
+          left: 260px;
+          right: 0;
+          height: 64px;
+          z-index: 1100;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 0 22px;
+          box-sizing: border-box;
+          background: var(--clinic-card-bg);
+          color: var(--clinic-text);
+          border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+        }
+
+        .app-top-header strong {
+          display: block;
+          font-size: 15px;
+        }
+
+        .app-top-header span {
+          display: block;
+          margin-top: 2px;
+          color: var(--clinic-muted-text);
+          font-size: 12px;
+        }
+
+        .main-content {
+          position: fixed !important;
+          top: 64px !important;
+          left: 260px !important;
+          right: 0 !important;
+          bottom: 66px !important;
+          width: auto !important;
+          height: auto !important;
+          margin: 0 !important;
+          padding: 22px !important;
+          box-sizing: border-box !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .global-action-footer {
+          left: 260px !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          height: 66px;
+          padding: 10px 18px;
+          box-sizing: border-box;
+          background: var(--clinic-card-bg);
+          border-top: 1px solid rgba(15, 23, 42, 0.10);
+          box-shadow: 0 -4px 18px rgba(15, 23, 42, 0.06);
+        }
+
+        .account-security-page {
+          width: min(100%, 980px);
+          margin: 0 auto;
+          display: grid;
+          gap: 18px;
+        }
+
+        .account-security-heading {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        @media (max-width: 900px) {
+          .app-top-header {
+            left: 0;
+            height: 58px;
+            padding: 0 14px;
+          }
+
+          .main-content {
+            top: 58px !important;
+            left: 0 !important;
+            bottom: 62px !important;
+            padding: 14px !important;
+          }
+
+          .global-action-footer {
+            display: flex !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 62px;
+            padding: 8px 10px;
+          }
+
+          .mobile-actions-menu {
+            display: none !important;
+          }
+        }
       `}</style>
       <aside className="sidebar">
         <div className="sidebar-brand">
@@ -1235,86 +1359,17 @@ const [showMobileMenu, setShowMobileMenu] =
           </div>
         </div>
       </aside>
-{/* Mobile top-right actions menu */}
-<div className="mobile-actions-menu">
-  <button
-    type="button"
-    className="mobile-actions-trigger"
-    onClick={() => setShowMobileMenu((open) => !open)}
-    aria-label="Open actions menu"
-    aria-expanded={showMobileMenu}
-  >
-    ⋮
-  </button>
+      <header className="app-top-header">
+        <div>
+          <strong>{clinic.clinic_name}</strong>
+          <span>Clinic Management System</span>
+        </div>
 
-  {showMobileMenu && (
-    <div className="mobile-actions-dropdown">
-      <button
-        type="button"
-        onClick={() => {
-          setShowMobileMenu(false);
-          setShowPassword(true);
-        }}
-      >
-        <KeyRound size={17} />
-        <span>Change Password</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => {
-          setShowMobileMenu(false);
-
-          const modalClose = document.querySelector(
-            ".modal-backdrop .modal-header .icon-btn"
-          );
-
-          if (modalClose) {
-            modalClose.click();
-            return;
-          }
-
-          const path = window.location.pathname;
-
-          if (/^\/admin\/clinics\/[^/]+$/.test(path)) {
-            navigate("/admin/clinics");
-            return;
-          }
-
-          if (path !== "/") {
-            navigate("/");
-          }
-        }}
-      >
-        <ArrowLeft size={17} />
-        <span>Return</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => {
-          setShowMobileMenu(false);
-          window.location.assign("/");
-        }}
-      >
-        <RefreshCw size={17} />
-        <span>Refresh</span>
-      </button>
-
-      <button
-        type="button"
-        className="mobile-actions-logout"
-        onClick={() => {
-          setShowMobileMenu(false);
-          logout();
-        }}
-      >
-        <LogOut size={17} />
-        <span>Logout</span>
-      </button>
-    </div>
-  )}
-</div>
+        <div style={{ textAlign: "right" }}>
+          <strong>{user.name || user.full_name || "Clinic User"}</strong>
+          <span>{user.job_role || user.system_role || user.role || "staff"}</span>
+        </div>
+      </header>
 
       <main className="main-content">
         <Routes>
@@ -1341,6 +1396,11 @@ const [showMobileMenu, setShowMobileMenu] =
           <Route
             path="/billing"
             element={<Billing />}
+          />
+
+          <Route
+            path="/account/security"
+            element={<AccountSecurityPage />}
           />
 
           <Route
@@ -1381,11 +1441,11 @@ const [showMobileMenu, setShowMobileMenu] =
           <button
             type="button"
             className="global-footer-btn"
-            onClick={() => setShowPassword(true)}
-            title="Change Password"
+            onClick={() => navigate("/account/security")}
+            title="Account Security"
           >
             <KeyRound size={18} />
-            <span className="footer-label">Change Password</span>
+            <span className="footer-label">Account Security</span>
           </button>
         </div>
 
@@ -1394,25 +1454,8 @@ const [showMobileMenu, setShowMobileMenu] =
             type="button"
             className="global-footer-btn"
             onClick={() => {
-              const modalClose = document.querySelector(
-                ".modal-backdrop .modal-header .icon-btn"
-              );
-
-              if (modalClose) {
-                modalClose.click();
-                return;
-              }
-
-              const path = window.location.pathname;
-
-              if (/^\/admin\/clinics\/[^/]+$/.test(path)) {
-                navigate("/admin/clinics");
-                return;
-              }
-
-              if (path !== "/") {
-                navigate("/");
-              }
+              if (window.location.pathname === "/") return;
+              navigate(-1);
             }}
             title="Return"
           >
@@ -1443,14 +1486,6 @@ const [showMobileMenu, setShowMobileMenu] =
           </button>
         </div>
       </div>
-
-      {showPassword && (
-        <ChangePasswordModal
-          onClose={() =>
-            setShowPassword(false)
-          }
-        />
-      )}
     </div>
   );
 }
@@ -1459,7 +1494,7 @@ const [showMobileMenu, setShowMobileMenu] =
    CHANGE PASSWORD
 ========================================================= */
 
-function ChangePasswordModal({ onClose }) {
+function AccountSecurityPage() {
   const [security, setSecurity] = useState({
     recovery_email: null,
     verified: false,
@@ -1467,8 +1502,6 @@ function ChangePasswordModal({ onClose }) {
   });
 
   const [email, setEmail] = useState("");
-  const [emailMode, setEmailMode] = useState(false);
-
   const [form, setForm] = useState({
     new_password: "",
     confirm_password: "",
@@ -1496,7 +1529,6 @@ function ChangePasswordModal({ onClose }) {
           data?.recovery_email_verified_at || null,
       });
 
-      setEmailMode(!data?.verified);
     } catch (err) {
       setNotice({
         type: "error",
@@ -1684,11 +1716,17 @@ function ChangePasswordModal({ onClose }) {
   }
 
   return (
-    <Modal
-      title="Account Security"
-      onClose={onClose}
-      wide
-    >
+    <div className="account-security-page">
+      <div className="account-security-heading">
+        <ShieldCheck size={28} />
+        <div>
+          <h1 style={{ margin: 0 }}>Account Security</h1>
+          <div style={{ color: "var(--clinic-muted-text)", marginTop: 4 }}>
+            Manage your verified security email and password.
+          </div>
+        </div>
+      </div>
+
       <Notice
         notice={notice}
         onClose={() => setNotice(null)}
@@ -1766,10 +1804,7 @@ function ChangePasswordModal({ onClose }) {
                 </div>
 
                 <FormActions
-                  onCancel={() => {
-                    setEmail("");
-                    setEmailMode(false);
-                  }}
+                  onCancel={() => setEmail("")}
                   busy={savingEmail}
                   text={
                     savingEmail
@@ -1850,7 +1885,10 @@ function ChangePasswordModal({ onClose }) {
             </div>
 
             <FormActions
-              onCancel={onClose}
+              onCancel={() => {
+                setForm({ new_password: "", confirm_password: "" });
+                setNotice(null);
+              }}
               busy={
                 savingPassword ||
                 !security.verified
@@ -1864,7 +1902,7 @@ function ChangePasswordModal({ onClose }) {
           </form>
         </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 
@@ -2014,6 +2052,54 @@ function Dashboard() {
   );
 }
 
+function PaginationBar({ pagination, onPage }) {
+  const page = Number(pagination?.page || 1);
+  const totalPages = Number(pagination?.total_pages || 0);
+  const total = Number(pagination?.total || 0);
+
+  if (!total && totalPages === 0) return null;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        flexWrap: "wrap",
+        marginTop: 14,
+      }}
+    >
+      <div style={{ color: "var(--clinic-muted-text)", fontSize: 13 }}>
+        {total.toLocaleString()} record{total === 1 ? "" : "s"} • Page {page} of{" "}
+        {Math.max(totalPages, 1)}
+      </div>
+
+      <div className="action-buttons">
+        <button
+          type="button"
+          className="btn small secondary"
+          disabled={!pagination?.has_previous_page}
+          onClick={() => onPage(page - 1)}
+        >
+          <ChevronLeft size={16} />
+          Previous
+        </button>
+
+        <button
+          type="button"
+          className="btn small secondary"
+          disabled={!pagination?.has_next_page}
+          onClick={() => onPage(page + 1)}
+        >
+          Next
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* =========================================================
    PATIENTS
 ========================================================= */
@@ -2055,17 +2141,41 @@ function Patients() {
   const [saving, setSaving] =
     useState(false);
 
-  async function load(q = "") {
-    try {
-      const { data } =
-        await api.get(
-          "/patients",
-          {
-            params: { q },
-          }
-        );
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 25,
+    total: 0,
+    total_pages: 0,
+    has_previous_page: false,
+    has_next_page: false,
+  });
 
-      setPatients(data);
+  async function load(q = search, requestedPage = page) {
+    try {
+      setLoading(true);
+
+      const { data } = await api.get("/patients", {
+        params: {
+          q,
+          page: requestedPage,
+          limit: 25,
+          sort: "created_at",
+          order: "desc",
+        },
+      });
+
+      setPatients(Array.isArray(data) ? data : data?.data || []);
+      setPagination(
+        data?.pagination || {
+          page: requestedPage,
+          limit: 25,
+          total: Array.isArray(data) ? data.length : 0,
+          total_pages: 1,
+          has_previous_page: false,
+          has_next_page: false,
+        }
+      );
     } catch (err) {
       setNotice({
         type: "error",
@@ -2077,14 +2187,19 @@ function Patients() {
   }
 
   useEffect(() => {
-    const timer =
-      setTimeout(() => {
-        load(search);
-      }, 250);
+    const timer = setTimeout(() => {
+      setPage(1);
+      load(search, 1);
+    }, 300);
 
-    return () =>
-      clearTimeout(timer);
+    return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    if (page > 1) {
+      load(search, page);
+    }
+  }, [page]);
 
   function openAdd() {
     setEditing(null);
@@ -2160,7 +2275,7 @@ function Patients() {
 
       setForm(emptyPatient);
 
-      await load(search);
+      await load(search, page);
     } catch (err) {
       setNotice({
         type: "error",
@@ -2197,7 +2312,7 @@ function Patients() {
         message: data.message,
       });
 
-      await load(search);
+      await load(search, page);
     } catch (err) {
       setNotice({
         type: "error",
@@ -2234,11 +2349,10 @@ function Patients() {
           <input
             placeholder="Search name, patient ID, phone or CNIC..."
             value={search}
-            onChange={(e) =>
-              setSearch(
-                e.target.value
-              )
-            }
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
       </div>
@@ -2370,6 +2484,8 @@ function Patients() {
           </table>
         </div>
       </div>
+
+      <PaginationBar pagination={pagination} onPage={setPage} />
 
       {showForm && (
         <Modal
@@ -2603,16 +2719,46 @@ function Appointments() {
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 25,
+    total: 0,
+    total_pages: 0,
+    has_previous_page: false,
+    has_next_page: false,
+  });
 
-  async function load() {
+  async function load(requestedPage = page, q = search) {
     try {
+      setLoading(true);
+
       const [a, p] = await Promise.all([
-        api.get("/appointments"),
-        api.get("/patients"),
+        api.get("/appointments", {
+          params: {
+            q,
+            page: requestedPage,
+            limit: 25,
+            sort: "appointment_at",
+            order: "desc",
+          },
+        }),
+        api.get("/patients", {
+          params: { page: 1, limit: 100, sort: "full_name", order: "asc" },
+        }),
       ]);
 
-      setAppointments(a.data);
-      setPatients(p.data);
+      setAppointments(Array.isArray(a.data) ? a.data : a.data?.data || []);
+      setPagination(a.data?.pagination || {
+        page: requestedPage,
+        limit: 25,
+        total: Array.isArray(a.data) ? a.data.length : 0,
+        total_pages: 1,
+        has_previous_page: false,
+        has_next_page: false,
+      });
+      setPatients(Array.isArray(p.data) ? p.data : p.data?.data || []);
     } catch (err) {
       setNotice({
         type: "error",
@@ -2624,8 +2770,17 @@ function Appointments() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    const timer = setTimeout(() => {
+      setPage(1);
+      load(1, search);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    if (page > 1) load(page, search);
+  }, [page]);
 
   function openAdd() {
     setEditing(null);
@@ -2753,6 +2908,20 @@ function Appointments() {
         onClose={() => setNotice(null)}
       />
 
+      <div className="toolbar">
+        <div className="search-box">
+          <Search size={18} />
+          <input
+            placeholder="Search patient, ID, phone or reason..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+      </div>
+
       <div className="table-card">
         <div className="table-wrap">
           <table>
@@ -2868,6 +3037,8 @@ function Appointments() {
           </table>
         </div>
       </div>
+
+      <PaginationBar pagination={pagination} onPage={setPage} />
 
       {showForm && (
         <Modal
@@ -3034,16 +3205,46 @@ function Treatments() {
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 25,
+    total: 0,
+    total_pages: 0,
+    has_previous_page: false,
+    has_next_page: false,
+  });
 
-  async function load() {
+  async function load(requestedPage = page, q = search) {
     try {
+      setLoading(true);
+
       const [t, p] = await Promise.all([
-        api.get("/treatments"),
-        api.get("/patients"),
+        api.get("/treatments", {
+          params: {
+            q,
+            page: requestedPage,
+            limit: 25,
+            sort: "treatment_date",
+            order: "desc",
+          },
+        }),
+        api.get("/patients", {
+          params: { page: 1, limit: 100, sort: "full_name", order: "asc" },
+        }),
       ]);
 
-      setTreatments(t.data);
-      setPatients(p.data);
+      setTreatments(Array.isArray(t.data) ? t.data : t.data?.data || []);
+      setPagination(t.data?.pagination || {
+        page: requestedPage,
+        limit: 25,
+        total: Array.isArray(t.data) ? t.data.length : 0,
+        total_pages: 1,
+        has_previous_page: false,
+        has_next_page: false,
+      });
+      setPatients(Array.isArray(p.data) ? p.data : p.data?.data || []);
     } catch (err) {
       setNotice({
         type: "error",
@@ -3055,8 +3256,17 @@ function Treatments() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    const timer = setTimeout(() => {
+      setPage(1);
+      load(1, search);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    if (page > 1) load(page, search);
+  }, [page]);
 
   function openAdd() {
     setEditing(null);
@@ -3650,6 +3860,20 @@ function Treatments() {
         }
       />
 
+      <div className="toolbar">
+        <div className="search-box">
+          <Search size={18} />
+          <input
+            placeholder="Search patient, ID, procedure, diagnosis, tooth or doctor..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+      </div>
+
       <div className="table-card">
         <div className="table-wrap">
           <table>
@@ -3767,6 +3991,8 @@ function Treatments() {
           </table>
         </div>
       </div>
+
+      <PaginationBar pagination={pagination} onPage={setPage} />
 
       {showForm && (
         <Modal
@@ -4011,18 +4237,63 @@ function Billing() {
   });
 
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [paymentPage, setPaymentPage] = useState(1);
+  const [invoicePagination, setInvoicePagination] = useState({
+    page: 1, limit: 25, total: 0, total_pages: 0,
+    has_previous_page: false, has_next_page: false,
+  });
+  const [paymentPagination, setPaymentPagination] = useState({
+    page: 1, limit: 25, total: 0, total_pages: 0,
+    has_previous_page: false, has_next_page: false,
+  });
 
-  async function load() {
+  async function load(
+    requestedInvoicePage = invoicePage,
+    requestedPaymentPage = paymentPage,
+    q = search
+  ) {
     try {
+      setLoading(true);
+
       const [i, p, py] = await Promise.all([
-        api.get("/billing"),
-        api.get("/patients"),
-        api.get("/billing/payments"),
+        api.get("/billing", {
+          params: {
+            q,
+            page: requestedInvoicePage,
+            limit: 25,
+            sort: "created_at",
+            order: "desc",
+          },
+        }),
+        api.get("/patients", {
+          params: { page: 1, limit: 100, sort: "full_name", order: "asc" },
+        }),
+        api.get("/billing/payments", {
+          params: {
+            q,
+            page: requestedPaymentPage,
+            limit: 25,
+            sort: "paid_at",
+            order: "desc",
+          },
+        }),
       ]);
 
-      setInvoices(i.data);
-      setPatients(p.data);
-      setPayments(py.data);
+      setInvoices(Array.isArray(i.data) ? i.data : i.data?.data || []);
+      setInvoicePagination(i.data?.pagination || {
+        page: requestedInvoicePage, limit: 25,
+        total: Array.isArray(i.data) ? i.data.length : 0,
+        total_pages: 1, has_previous_page: false, has_next_page: false,
+      });
+      setPatients(Array.isArray(p.data) ? p.data : p.data?.data || []);
+      setPayments(Array.isArray(py.data) ? py.data : py.data?.data || []);
+      setPaymentPagination(py.data?.pagination || {
+        page: requestedPaymentPage, limit: 25,
+        total: Array.isArray(py.data) ? py.data.length : 0,
+        total_pages: 1, has_previous_page: false, has_next_page: false,
+      });
     } catch (err) {
       setNotice({
         type: "error",
@@ -4034,8 +4305,20 @@ function Billing() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    const timer = setTimeout(() => {
+      setInvoicePage(1);
+      setPaymentPage(1);
+      load(1, 1, search);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    if (invoicePage > 1 || paymentPage > 1) {
+      load(invoicePage, paymentPage, search);
+    }
+  }, [invoicePage, paymentPage]);
 
   const activeInvoices = invoices.filter(
     (i) => i.status !== "paid"
@@ -4293,6 +4576,21 @@ function Billing() {
         }
       />
 
+      <div className="toolbar">
+        <div className="search-box">
+          <Search size={18} />
+          <input
+            placeholder="Search invoice, patient, ID, phone or payment reference..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setInvoicePage(1);
+              setPaymentPage(1);
+            }}
+          />
+        </div>
+      </div>
+
       <div className="billing-summary">
         <div>
           <span>Outstanding</span>
@@ -4519,6 +4817,8 @@ function Billing() {
         </div>
       </div>
 
+      <PaginationBar pagination={invoicePagination} onPage={setInvoicePage} />
+
       <div className="section-heading">
         <div>
           <h2>
@@ -4638,6 +4938,10 @@ function Billing() {
           </table>
         </div>
       </div>
+
+      <PaginationBar pagination={paymentPagination} onPage={setPaymentPage} />
+
+
 
       {invoiceModal && (
         <Modal
@@ -7798,6 +8102,16 @@ function App() {
         <Route
           path="/login"
           element={<Login />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPassword />}
+        />
+
+        <Route
+          path="/reset-password"
+          element={<ResetPassword />}
         />
 
         <Route

@@ -113,16 +113,24 @@ function getClinicId(req, res) {
 
 
 /* =========================================================
-   GET PATIENTS / SEARCH
+   GET PATIENTS / SEARCH / PAGINATION
 
-   IMPORTANT:
+   SECURITY:
    Only patients belonging to logged-in clinic are returned.
 
-   Search:
-   - Name
-   - Phone
-   - Patient ID
-   - CNIC
+   Query params:
+   - q: search name / phone / patient code / CNIC
+   - page: 1-based page number
+   - limit: records per page (max 100)
+   - sort: created_at | full_name | patient_code
+   - order: asc | desc
+
+   RESPONSE:
+   - Backward compatible:
+     Without pagination params, returns the legacy array response.
+   - Paginated:
+     When page/limit/sort/order is supplied, returns:
+     { data, pagination }
 ========================================================= */
 
 r.get(
@@ -136,7 +144,86 @@ r.get(
 
     const search = String(req.query.q || "").trim();
 
-    const q = `%${search}%`;
+    const hasPaginationParams =
+      req.query.page !== undefined ||
+      req.query.limit !== undefined ||
+      req.query.sort !== undefined ||
+      req.query.order !== undefined;
+
+    const parsedPage = Number.parseInt(String(req.query.page || "1"), 10);
+    const parsedLimit = Number.parseInt(String(req.query.limit || "25"), 10);
+
+    const page =
+      Number.isFinite(parsedPage) && parsedPage > 0
+        ? parsedPage
+        : 1;
+
+    const limit =
+      Number.isFinite(parsedLimit) && parsedLimit > 0
+        ? Math.min(parsedLimit, 100)
+        : 25;
+
+    const offset = (page - 1) * limit;
+
+    const allowedSorts = {
+      created_at: "p.created_at",
+      full_name: "p.full_name",
+      patient_code: "p.patient_code",
+    };
+
+    const requestedSort = String(
+      req.query.sort || "created_at"
+    ).toLowerCase();
+
+    const sortColumn =
+      allowedSorts[requestedSort] ||
+      allowedSorts.created_at;
+
+    const order =
+      String(req.query.order || "desc").toLowerCase() === "asc"
+        ? "ASC"
+        : "DESC";
+
+    const values = [clinicId];
+
+    let searchSql = "";
+
+    if (search) {
+      values.push(`%${search}%`);
+
+      searchSql = `
+        AND (
+          COALESCE(p.full_name, '') ILIKE $2
+          OR COALESCE(p.phone, '') ILIKE $2
+          OR COALESCE(p.patient_code, '') ILIKE $2
+          OR COALESCE(p.cnic, '') ILIKE $2
+        )
+      `;
+    }
+
+    const countResult = await pool.query(
+      `
+        SELECT COUNT(*)::int AS total
+
+        FROM patients p
+
+        WHERE p.clinic_id = $1
+        ${searchSql}
+      `,
+      values
+    );
+
+    const total = Number(countResult.rows[0]?.total || 0);
+    const totalPages =
+      total === 0 ? 0 : Math.ceil(total / limit);
+
+    const dataValues = [...values];
+
+    dataValues.push(limit);
+    const limitParam = `$${dataValues.length}`;
+
+    dataValues.push(offset);
+    const offsetParam = `$${dataValues.length}`;
 
     const { rows } = await pool.query(
       `
@@ -159,31 +246,51 @@ r.get(
 
         FROM patients p
 
-        WHERE
-          p.clinic_id = $1
-
-          AND (
-            COALESCE(p.full_name, '') ILIKE $2
-
-            OR COALESCE(p.phone, '') ILIKE $2
-
-            OR COALESCE(p.patient_code, '') ILIKE $2
-
-            OR COALESCE(p.cnic, '') ILIKE $2
-          )
+        WHERE p.clinic_id = $1
+        ${searchSql}
 
         ORDER BY
-          p.created_at DESC
+          ${sortColumn} ${order} NULLS LAST,
+          p.id DESC
 
-        LIMIT 500
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}
       `,
-      [
-        clinicId,
-        q,
-      ]
+      dataValues
     );
 
-    res.json(rows);
+    /*
+     * Compatibility mode:
+     *
+     * Existing frontend currently expects GET /patients
+     * to return an array. Keep that behavior until the
+     * frontend Patients page is migrated to pagination.
+     *
+     * Search without page/limit also remains compatible,
+     * but is capped to 100 records for browser safety.
+     */
+    if (!hasPaginationParams) {
+      return res.json(rows.slice(0, 100));
+    }
+
+    res.json({
+      data: rows,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+        has_previous_page: page > 1,
+        has_next_page: page < totalPages,
+      },
+
+      search,
+      sort: requestedSort in allowedSorts
+        ? requestedSort
+        : "created_at",
+      order: order.toLowerCase(),
+    });
   })
 );
 

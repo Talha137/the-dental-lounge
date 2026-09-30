@@ -3060,3 +3060,44 @@ input[type="color"] {
 .notice .icon-btn {
   flex: 0 0 34px;
 }
+/* MOBILE GLOBAL ACTION BUTTON FIX ONLY */
+@media (max-width: 680px) {
+  .global-action-footer {
+    left: auto !important;
+    right: 18px !important;
+    bottom: 88px !important;
+    width: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    gap: 5px !important;
+  }
+
+  .global-action-footer-left,
+  .global-action-footer-right {
+    display: flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+  }
+
+  .global-footer-btn {
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    padding: 0 !important;
+    border-radius: 11px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .global-footer-btn svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  .global-footer-btn .footer-label {
+    display: none !important;
+  }
+}

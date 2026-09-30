@@ -56,46 +56,152 @@ function getClinicId(req, res) {
 }
 
 /* =========================================================
-   GET ALL APPOINTMENTS
+   GET APPOINTMENTS / SEARCH / PAGINATION
 
-   Only appointments belonging to logged-in clinic.
+   Query:
+   q, page, limit, status, from, to, sort, order
+
+   Backward compatibility:
+   Without pagination/filter params, returns an array.
 ========================================================= */
 
 r.get(
   "/",
   asyncHandler(async (req, res) => {
     const clinicId = getClinicId(req, res);
+    if (!clinicId) return;
 
-    if (!clinicId) {
-      return;
+    const search = String(req.query.q || "").trim();
+    const status = String(req.query.status || "").trim().toLowerCase();
+    const from = String(req.query.from || "").trim();
+    const to = String(req.query.to || "").trim();
+
+    const hasPaginationParams =
+      req.query.page !== undefined ||
+      req.query.limit !== undefined ||
+      req.query.sort !== undefined ||
+      req.query.order !== undefined ||
+      req.query.status !== undefined ||
+      req.query.from !== undefined ||
+      req.query.to !== undefined;
+
+    const rawPage = Number.parseInt(String(req.query.page || "1"), 10);
+    const rawLimit = Number.parseInt(String(req.query.limit || "25"), 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(rawLimit, 100)
+        : 25;
+    const offset = (page - 1) * limit;
+
+    if (status && !allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid appointment status." });
     }
+
+    const allowedSorts = {
+      appointment_at: "a.appointment_at",
+      created_at: "a.created_at",
+      patient_name: "p.full_name",
+      status: "a.status",
+    };
+    const requestedSort = String(req.query.sort || "appointment_at").toLowerCase();
+    const sortColumn = allowedSorts[requestedSort] || allowedSorts.appointment_at;
+    const order =
+      String(req.query.order || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
+
+    const values = [clinicId];
+    const filters = [];
+
+    if (search) {
+      values.push(`%${search}%`);
+      const n = values.length;
+      filters.push(`(
+        COALESCE(p.full_name, '') ILIKE $${n}
+        OR COALESCE(p.patient_code, '') ILIKE $${n}
+        OR COALESCE(p.phone, '') ILIKE $${n}
+        OR COALESCE(a.reason, '') ILIKE $${n}
+      )`);
+    }
+
+    if (status) {
+      values.push(status);
+      filters.push(`a.status = $${values.length}`);
+    }
+
+    if (from) {
+      values.push(from);
+      filters.push(`a.appointment_at >= $${values.length}::timestamptz`);
+    }
+
+    if (to) {
+      values.push(to);
+      filters.push(`a.appointment_at <= $${values.length}::timestamptz`);
+    }
+
+    const whereExtra = filters.length ? `AND ${filters.join(" AND ")}` : "";
+
+    const countResult = await pool.query(
+      `
+        SELECT COUNT(*)::int AS total
+        FROM appointments a
+        JOIN patients p
+          ON p.id = a.patient_id
+         AND p.clinic_id = a.clinic_id
+        WHERE a.clinic_id = $1
+        ${whereExtra}
+      `,
+      values
+    );
+
+    const total = Number(countResult.rows[0]?.total || 0);
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+    const dataValues = [...values, limit, offset];
+    const limitParam = `$${dataValues.length - 1}`;
+    const offsetParam = `$${dataValues.length}`;
 
     const { rows } = await pool.query(
       `
-      SELECT
-        a.*,
-        p.full_name AS patient_name,
-        p.patient_code,
-        p.phone AS patient_phone,
-        p.gender AS patient_gender
-
-      FROM appointments a
-
-      JOIN patients p
-        ON p.id = a.patient_id
-       AND p.clinic_id = a.clinic_id
-
-      WHERE a.clinic_id = $1
-
-      ORDER BY
-        a.appointment_at DESC
-
-      LIMIT 500
+        SELECT
+          a.*,
+          p.full_name AS patient_name,
+          p.patient_code,
+          p.phone AS patient_phone,
+          p.gender AS patient_gender
+        FROM appointments a
+        JOIN patients p
+          ON p.id = a.patient_id
+         AND p.clinic_id = a.clinic_id
+        WHERE a.clinic_id = $1
+        ${whereExtra}
+        ORDER BY ${sortColumn} ${order} NULLS LAST, a.id DESC
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}
       `,
-      [clinicId]
+      dataValues
     );
 
-    res.json(rows);
+    if (!hasPaginationParams) {
+      return res.json(rows.slice(0, 100));
+    }
+
+    res.json({
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+        has_previous_page: page > 1,
+        has_next_page: page < totalPages,
+      },
+      search,
+      status: status || null,
+      sort: Object.prototype.hasOwnProperty.call(allowedSorts, requestedSort)
+        ? requestedSort
+        : "appointment_at",
+      order: order.toLowerCase(),
+    });
   })
 );
 

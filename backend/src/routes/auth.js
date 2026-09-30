@@ -378,8 +378,7 @@ r.post(
 
       if (
         u.subscription_status &&
-        u.subscription_status !==
-          "active"
+        u.subscription_status !== "active"
       ) {
         return res.status(403).json({
           message:
@@ -404,21 +403,12 @@ r.post(
     const token = jwt.sign(
       {
         id: u.id,
-
         name: u.full_name,
-
         email: u.email,
-
         role: u.role,
-
-        system_role:
-          u.system_role,
-
-        job_role:
-          u.job_role,
-
-        clinic_id:
-          u.clinic_id,
+        system_role: u.system_role,
+        job_role: u.job_role,
+        clinic_id: u.clinic_id,
       },
 
       process.env.JWT_SECRET,
@@ -428,32 +418,20 @@ r.post(
       }
     );
 
-    const clinic =
-      buildClinic(u);
+    const clinic = buildClinic(u);
 
     res.json({
       token,
 
       user: {
         id: u.id,
-
         name: u.full_name,
-
-        full_name:
-          u.full_name,
-
+        full_name: u.full_name,
         email: u.email,
-
         role: u.role,
-
-        system_role:
-          u.system_role,
-
-        job_role:
-          u.job_role,
-
-        clinic_id:
-          u.clinic_id,
+        system_role: u.system_role,
+        job_role: u.job_role,
+        clinic_id: u.clinic_id,
 
         recovery_email:
           u.recovery_email,
@@ -485,7 +463,6 @@ r.get(
           ${USER_CLINIC_SELECT}
 
           WHERE u.id = $1
-
             AND u.active = TRUE
 
           LIMIT 1
@@ -521,8 +498,7 @@ r.get(
 
       if (
         u.subscription_status &&
-        u.subscription_status !==
-          "active"
+        u.subscription_status !== "active"
       ) {
         return res.status(403).json({
           message:
@@ -531,32 +507,18 @@ r.get(
       }
     }
 
-    const clinic =
-      buildClinic(u);
+    const clinic = buildClinic(u);
 
     const user = {
       id: u.id,
-
       name: u.full_name,
-
-      full_name:
-        u.full_name,
-
+      full_name: u.full_name,
       email: u.email,
-
       role: u.role,
-
-      system_role:
-        u.system_role,
-
-      job_role:
-        u.job_role,
-
-      clinic_id:
-        u.clinic_id,
-
-      last_login_at:
-        u.last_login_at,
+      system_role: u.system_role,
+      job_role: u.job_role,
+      clinic_id: u.clinic_id,
+      last_login_at: u.last_login_at,
 
       recovery_email:
         u.recovery_email,
@@ -569,16 +531,14 @@ r.get(
 
     res.json({
       ...user,
-
       user,
-
       clinic,
     });
   })
 );
 
 /* =========================================================
-   SECURITY EMAIL + PASSWORD HELPERS
+   SECURITY / TOKEN HELPERS
 ========================================================= */
 
 const TOKEN_MINUTES = 15;
@@ -592,16 +552,14 @@ function getAppUrl() {
 }
 
 function createTokenPair() {
-  const raw =
-    crypto
-      .randomBytes(32)
-      .toString("hex");
+  const raw = crypto
+    .randomBytes(32)
+    .toString("hex");
 
-  const hash =
-    crypto
-      .createHash("sha256")
-      .update(raw)
-      .digest("hex");
+  const hash = crypto
+    .createHash("sha256")
+    .update(raw)
+    .digest("hex");
 
   return {
     raw,
@@ -800,9 +758,8 @@ r.get(
     });
   })
 );
-
 /* =========================================================
-   FIRST TIME SECURITY EMAIL
+   REQUEST FIRST TIME / NEW SECURITY EMAIL
 ========================================================= */
 
 r.post(
@@ -1305,7 +1262,6 @@ r.get(
     }
   })
 );
-
 /* =========================================================
    REQUEST PASSWORD CHANGE
 
@@ -1662,5 +1618,446 @@ r.get(
     }
   })
 );
+/* =========================================================
+   FORGOT PASSWORD
+
+   Public endpoint.
+   The response is intentionally generic so callers cannot
+   discover whether an account or recovery email exists.
+========================================================= */
+
+r.post(
+  "/forgot-password",
+
+  asyncHandler(async (req, res) => {
+    const p = z
+      .object({
+        email: z
+          .string()
+          .trim()
+          .email(),
+      })
+      .parse(req.body);
+
+    const genericResponse = {
+      message:
+        "If an eligible account exists, a password reset email has been sent to its verified security email.",
+    };
+
+    const { rows } = await pool.query(
+      `
+        SELECT
+          u.id,
+          u.full_name,
+          u.email,
+          u.clinic_id,
+          u.active,
+          u.recovery_email,
+          u.recovery_email_verified_at
+
+        FROM users u
+
+        WHERE LOWER(u.email) = LOWER($1)
+          AND u.active = TRUE
+
+        LIMIT 1
+      `,
+      [p.email]
+    );
+
+    const user = rows[0];
+
+    /*
+     * Never reveal whether:
+     * - login email exists
+     * - recovery email exists
+     * - recovery email is verified
+     */
+    if (
+      !user ||
+      !user.recovery_email ||
+      !user.recovery_email_verified_at
+    ) {
+      return res.json(
+        genericResponse
+      );
+    }
+
+    const token =
+      createTokenPair();
+
+    /*
+     * Cancel all previous active reset links.
+     */
+    await pool.query(
+      `
+        UPDATE password_reset_requests
+
+        SET cancelled_at = NOW()
+
+        WHERE user_id = $1
+          AND used_at IS NULL
+          AND cancelled_at IS NULL
+      `,
+      [user.id]
+    );
+
+    /*
+     * Store only token hash.
+     * Raw token is sent in email only.
+     */
+    const inserted =
+      await pool.query(
+        `
+          INSERT INTO password_reset_requests
+          (
+            user_id,
+            clinic_id,
+            token_hash,
+            expires_at
+          )
+
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            NOW() + INTERVAL '15 minutes'
+          )
+
+          RETURNING id
+        `,
+        [
+          user.id,
+          user.clinic_id,
+          token.hash,
+        ]
+      );
+
+    const requestId =
+      inserted.rows[0]?.id;
+
+    /*
+     * IMPORTANT:
+     * This goes to the FRONTEND reset-password page.
+     *
+     * Production:
+     * APP_URL=https://the-dental-lounge-weld.vercel.app
+     */
+    const url =
+      `${getAppUrl()}` +
+      `/reset-password` +
+      `?token=${encodeURIComponent(token.raw)}`;
+
+    try {
+      await sendMail(
+        user.recovery_email,
+
+        "Reset your password",
+
+        verificationEmail(
+          "Reset Password",
+
+          "A password reset was requested for your account. Open the secure link below to choose a new password.",
+
+          "Reset Password",
+
+          url
+        )
+      );
+    } catch (error) {
+      /*
+       * If email delivery fails,
+       * invalidate the generated token.
+       *
+       * Public response remains generic so
+       * account existence is not disclosed.
+       */
+      if (requestId) {
+        await pool.query(
+          `
+            UPDATE password_reset_requests
+
+            SET cancelled_at = NOW()
+
+            WHERE id = $1
+              AND used_at IS NULL
+          `,
+          [requestId]
+        );
+      }
+
+      console.error(
+        "Forgot password email error:",
+        error
+      );
+    }
+
+    return res.json(
+      genericResponse
+    );
+  })
+);
+
+/* =========================================================
+   RESET FORGOTTEN PASSWORD
+
+   Public endpoint reached from the emailed one-time token.
+   Password is changed only after the token is validated.
+========================================================= */
+
+r.post(
+  "/reset-password",
+
+  asyncHandler(async (req, res) => {
+    const p = z
+      .object({
+        token: z
+          .string()
+          .min(20),
+
+        new_password: z
+          .string()
+          .min(
+            8,
+            "New password must be at least 8 characters"
+          ),
+
+        confirm_password: z
+          .string()
+          .min(
+            8,
+            "Confirm password is required"
+          ),
+      })
+      .refine(
+        (data) =>
+          data.new_password ===
+          data.confirm_password,
+
+        {
+          message:
+            "New passwords do not match",
+
+          path: [
+            "confirm_password",
+          ],
+        }
+      )
+      .parse(req.body);
+
+    const tokenHash =
+      hashToken(p.token);
+
+    const client =
+      await pool.connect();
+
+    try {
+      await client.query(
+        "BEGIN"
+      );
+
+      /*
+       * Lock the reset request so the same token
+       * cannot be successfully consumed twice.
+       */
+      const { rows } =
+        await client.query(
+          `
+            SELECT
+              pr.id,
+              pr.user_id,
+
+              u.password_hash,
+              u.active
+
+            FROM password_reset_requests pr
+
+            JOIN users u
+              ON u.id = pr.user_id
+
+            WHERE pr.token_hash = $1
+
+              AND pr.used_at IS NULL
+
+              AND pr.cancelled_at IS NULL
+
+              AND pr.expires_at > NOW()
+
+            FOR UPDATE OF pr
+          `,
+          [tokenHash]
+        );
+
+      const request =
+        rows[0];
+
+      if (
+        !request ||
+        !request.active
+      ) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .json({
+            message:
+              "This password reset link is invalid or expired.",
+          });
+      }
+
+      /*
+       * Prevent resetting to the currently active password.
+       */
+      const samePassword =
+        await bcrypt.compare(
+          p.new_password,
+          request.password_hash
+        );
+
+      if (samePassword) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .json({
+            message:
+              "New password must be different from your current password",
+          });
+      }
+
+      /*
+       * Password is never stored in plaintext.
+       */
+      const newPasswordHash =
+        await bcrypt.hash(
+          p.new_password,
+          12
+        );
+
+      const updated =
+        await client.query(
+          `
+            UPDATE users
+
+            SET
+              password_hash = $1,
+
+              updated_at = NOW()
+
+            WHERE id = $2
+
+              AND active = TRUE
+
+            RETURNING id
+          `,
+          [
+            newPasswordHash,
+            request.user_id,
+          ]
+        );
+
+      if (!updated.rows[0]) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res
+          .status(400)
+          .json({
+            message:
+              "This user account is no longer active.",
+          });
+      }
+
+      /*
+       * Consume this reset link.
+       */
+      await client.query(
+        `
+          UPDATE password_reset_requests
+
+          SET used_at = NOW()
+
+          WHERE id = $1
+        `,
+        [request.id]
+      );
+
+      /*
+       * Cancel every other active forgot-password
+       * reset link belonging to this account.
+       */
+      await client.query(
+        `
+          UPDATE password_reset_requests
+
+          SET cancelled_at = NOW()
+
+          WHERE user_id = $1
+
+            AND id <> $2
+
+            AND used_at IS NULL
+
+            AND cancelled_at IS NULL
+        `,
+        [
+          request.user_id,
+          request.id,
+        ]
+      );
+
+      /*
+       * IMPORTANT SECURITY:
+       *
+       * If an authenticated password-change request
+       * was waiting for email confirmation, reject it.
+       *
+       * Otherwise an older email link could later
+       * overwrite this newly reset password.
+       */
+      await client.query(
+        `
+          UPDATE password_change_requests
+
+          SET rejected_at = NOW()
+
+          WHERE user_id = $1
+
+            AND confirmed_at IS NULL
+
+            AND rejected_at IS NULL
+        `,
+        [request.user_id]
+      );
+
+      await client.query(
+        "COMMIT"
+      );
+
+      return res.json({
+        message:
+          "Password reset successfully. You can now sign in with your new password.",
+      });
+    } catch (error) {
+      await client.query(
+        "ROLLBACK"
+      );
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+/* =========================================================
+   ROUTER EXPORT
+========================================================= */
 
 export default r;
