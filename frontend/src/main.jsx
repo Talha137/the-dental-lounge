@@ -283,29 +283,40 @@ function Modal({
   wide = false,
 }) {
   return (
-    <div className="modal-backdrop">
+    <section
+      className="workspace-editor-shell"
+      role="region"
+      aria-label={title}
+    >
       <div
-        className={`modal ${
-          wide ? "modal-wide" : ""
+        className={`workspace-editor-page ${
+          wide ? "workspace-editor-wide" : ""
         }`}
       >
-        <div className="modal-header">
-          <h2>{title}</h2>
+        <div className="workspace-editor-header">
+          <div>
+            <span className="workspace-editor-kicker">
+              Workspace
+            </span>
+
+            <h1>{title}</h1>
+          </div>
 
           <button
             type="button"
-            className="icon-btn"
+            className="btn secondary workspace-editor-back"
             onClick={onClose}
           >
-            <X size={20} />
+            <ArrowLeft size={18} />
+            Back
           </button>
         </div>
 
-        <div className="modal-body">
+        <div className="workspace-editor-body">
           {children}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1268,6 +1279,301 @@ function Shell() {
 
           .mobile-actions-menu {
             display: none !important;
+          }
+        }
+
+        /* FINAL APP FRAME — one screen, fixed chrome, scrollable workspace */
+        :root {
+          --app-sidebar-width: 260px;
+          --app-header-height: 64px;
+          --app-footer-height: 66px;
+        }
+
+        .app-shell {
+          position: relative !important;
+          width: 100vw !important;
+          height: 100dvh !important;
+          min-height: 100dvh !important;
+          overflow: hidden !important;
+        }
+
+        .sidebar {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          bottom: 0 !important;
+          width: var(--app-sidebar-width) !important;
+          height: 100dvh !important;
+          max-height: 100dvh !important;
+          overflow: hidden !important;
+          z-index: 1300 !important;
+          box-sizing: border-box !important;
+        }
+
+        .sidebar nav {
+          overflow-y: auto;
+          min-height: 0;
+          overscroll-behavior: contain;
+        }
+
+        .app-top-header {
+          top: 0 !important;
+          left: var(--app-sidebar-width) !important;
+          right: 0 !important;
+          height: var(--app-header-height) !important;
+          z-index: 1400 !important;
+          box-shadow: none !important;
+        }
+
+        .main-content {
+          top: var(--app-header-height) !important;
+          left: var(--app-sidebar-width) !important;
+          right: 0 !important;
+          bottom: var(--app-footer-height) !important;
+          width: auto !important;
+          height: auto !important;
+          max-height: none !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          padding: 22px !important;
+          scroll-behavior: smooth;
+          scrollbar-gutter: stable;
+        }
+
+        .global-action-footer {
+          left: var(--app-sidebar-width) !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          height: var(--app-footer-height) !important;
+          min-height: var(--app-footer-height) !important;
+          z-index: 1400 !important;
+          margin: 0 !important;
+          border-radius: 0 !important;
+          box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06) !important;
+        }
+
+        /* Every Add/Edit/Create/Receive/Configuration workflow opens as
+           a full workspace page — never as a viewport popup. */
+        .workspace-editor-shell {
+          position: fixed;
+          top: var(--app-header-height);
+          left: var(--app-sidebar-width);
+          right: 0;
+          bottom: var(--app-footer-height);
+          z-index: 1250;
+          box-sizing: border-box;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+          padding: 22px;
+          background: var(--clinic-page-bg);
+        }
+
+        .workspace-editor-page {
+          width: 100%;
+          max-width: 1100px;
+          min-height: 100%;
+          margin: 0 auto;
+          box-sizing: border-box;
+          color: var(--clinic-text);
+        }
+
+        .workspace-editor-page.workspace-editor-wide {
+          max-width: 1400px;
+        }
+
+        .workspace-editor-header {
+          position: sticky;
+          top: -22px;
+          z-index: 20;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          min-height: 76px;
+          margin: -22px -2px 22px;
+          padding: 16px 2px 14px;
+          background: var(--clinic-page-bg);
+          border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+        }
+
+        .workspace-editor-kicker {
+          display: block;
+          margin-bottom: 3px;
+          color: var(--clinic-muted-text);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: .08em;
+          text-transform: uppercase;
+        }
+
+        .workspace-editor-header h1 {
+          margin: 0;
+          color: var(--clinic-text);
+          font-size: clamp(22px, 2vw, 30px);
+          line-height: 1.15;
+        }
+
+        .workspace-editor-back {
+          flex: 0 0 auto;
+        }
+
+        .workspace-editor-body {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 0 0 24px;
+        }
+
+        .workspace-editor-body > form,
+        .workspace-editor-body > .theme-studio,
+        .workspace-editor-body > div {
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .workspace-editor-body form {
+          padding: 22px;
+          border: 1px solid rgba(15, 23, 42, 0.10);
+          border-radius: 18px;
+          background: var(--clinic-card-bg);
+          box-shadow: 0 10px 34px rgba(15, 23, 42, 0.06);
+        }
+
+        .workspace-editor-body .form-actions {
+          position: sticky;
+          bottom: -22px;
+          z-index: 15;
+          margin: 22px -22px -22px !important;
+          padding: 14px 22px;
+          background: var(--clinic-card-bg);
+          border-top: 1px solid rgba(15, 23, 42, 0.10);
+        }
+
+        .workspace-editor-body input,
+        .workspace-editor-body select,
+        .workspace-editor-body textarea {
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+
+        .workspace-editor-body textarea {
+          resize: vertical;
+        }
+
+        @media (max-width: 900px) {
+          :root {
+            --app-sidebar-width: 0px;
+            --app-header-height: 58px;
+            --app-footer-height: 62px;
+          }
+
+          .sidebar {
+            display: none !important;
+          }
+
+          .app-top-header {
+            left: 0 !important;
+          }
+
+          .main-content {
+            left: 0 !important;
+            padding: 14px !important;
+          }
+
+          .global-action-footer {
+            left: 0 !important;
+            right: 0 !important;
+            display: flex !important;
+          }
+
+          .workspace-editor-shell {
+            left: 0;
+            padding: 14px;
+          }
+
+          .workspace-editor-header {
+            top: -14px;
+            min-height: 68px;
+            margin: -14px -1px 16px;
+            padding: 12px 1px 11px;
+          }
+
+          .workspace-editor-body form {
+            padding: 16px;
+            border-radius: 14px;
+          }
+
+          .workspace-editor-body .form-grid,
+          .workspace-editor-body .theme-studio,
+          .workspace-editor-body .theme-color-grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .workspace-editor-body .form-actions {
+            bottom: -14px;
+            margin: 18px -16px -16px !important;
+            padding: 12px 16px;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .app-top-header {
+            padding: 0 10px !important;
+          }
+
+          .app-top-header > div:first-child span {
+            display: none;
+          }
+
+          .app-top-header strong {
+            max-width: 42vw;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .main-content {
+            padding: 10px !important;
+          }
+
+          .workspace-editor-shell {
+            padding: 10px;
+          }
+
+          .workspace-editor-header {
+            top: -10px;
+            margin: -10px 0 14px;
+            padding: 10px 0;
+          }
+
+          .workspace-editor-header h1 {
+            font-size: 21px;
+          }
+
+          .workspace-editor-kicker {
+            display: none;
+          }
+
+          .workspace-editor-back {
+            min-width: 44px;
+            padding: 9px 10px !important;
+          }
+
+          .workspace-editor-body form {
+            padding: 14px;
+            border-radius: 12px;
+          }
+
+          .workspace-editor-body .form-actions {
+            bottom: -10px;
+            margin: 16px -14px -14px !important;
+            padding: 10px 14px;
+          }
+
+          .workspace-editor-body .form-actions .btn {
+            min-height: 42px;
           }
         }
       `}</style>
