@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { createPortal } from "react-dom";
 import {
   BrowserRouter,
   Navigate,
@@ -115,6 +116,71 @@ function getError(error) {
     error?.message ||
     "Something went wrong. Please try again."
   );
+}
+
+const EDITOR_STORAGE_PREFIX = "__tdl_editor_payload__:";
+const APP_REFRESH_KEY = "__tdl_app_refresh__";
+
+function editorStorageKey(path) {
+  return `${EDITOR_STORAGE_PREFIX}${path}`;
+}
+
+function openWorkspaceTab(path, payload = null) {
+  try {
+    if (payload) {
+      localStorage.setItem(
+        editorStorageKey(path),
+        JSON.stringify({ saved_at: Date.now(), payload })
+      );
+    }
+  } catch {}
+
+  const url = new URL(path, window.location.origin).toString();
+  const tab = window.open(url, "_blank");
+
+  if (tab) {
+    try { tab.opener = null; } catch {}
+    return;
+  }
+
+  window.location.assign(url);
+}
+
+function readWorkspacePayload(path = window.location.pathname) {
+  try {
+    const raw = localStorage.getItem(editorStorageKey(path));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    const age = Date.now() - Number(parsed?.saved_at || 0);
+
+    if (!Number.isFinite(age) || age > 30 * 60 * 1000) {
+      localStorage.removeItem(editorStorageKey(path));
+      return null;
+    }
+
+    return parsed?.payload || null;
+  } catch {
+    return null;
+  }
+}
+
+function signalAppRefresh() {
+  try {
+    localStorage.setItem(APP_REFRESH_KEY, String(Date.now()));
+  } catch {}
+}
+
+function closeWorkspaceTab(fallbackPath, refresh = false) {
+  if (refresh) signalAppRefresh();
+
+  window.close();
+
+  window.setTimeout(() => {
+    if (!document.hidden) {
+      window.location.assign(fallbackPath);
+    }
+  }, 180);
 }
 
 function getStoredUser() {
@@ -282,7 +348,7 @@ function Modal({
   onClose,
   wide = false,
 }) {
-  return (
+  return createPortal(
     <section
       className="workspace-editor-shell"
       role="region"
@@ -316,7 +382,8 @@ function Modal({
           {children}
         </div>
       </div>
-    </section>
+    </section>,
+    document.body
   );
 }
 
@@ -669,6 +736,39 @@ function Shell() {
 
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleStorage(event) {
+      if (event.key === APP_REFRESH_KEY) {
+        window.location.reload();
+      }
+    }
+
+    function handleWheel(event) {
+      const editor = document.querySelector(".workspace-editor-shell");
+
+      if (editor) {
+        if (!editor.contains(event.target)) {
+          editor.scrollTop += event.deltaY;
+        }
+        return;
+      }
+
+      const main = document.querySelector(".main-content");
+
+      if (main && !main.contains(event.target)) {
+        main.scrollTop += event.deltaY;
+      }
+    }
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("wheel", handleWheel, { passive: true });
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("wheel", handleWheel);
     };
   }, []);
 
@@ -1576,6 +1676,104 @@ function Shell() {
             min-height: 42px;
           }
         }
+
+        /* FINAL UX OVERRIDES */
+        .main-content {
+          overflow-y: auto !important;
+          overscroll-behavior-y: auto !important;
+          padding-bottom: 34px !important;
+          touch-action: pan-y;
+        }
+
+        .page-body {
+          padding-bottom: 48px !important;
+        }
+
+        .account-security-page {
+          padding-bottom: 34px !important;
+        }
+
+        .form-actions,
+        .modal .form-actions,
+        .account-security-page .form-actions,
+        .workspace-editor-body .form-actions {
+          position: static !important;
+          left: auto !important;
+          right: auto !important;
+          bottom: auto !important;
+          z-index: auto !important;
+          margin: 20px 0 0 !important;
+          padding: 16px 0 0 !important;
+          background: transparent !important;
+          border-top: 1px solid rgba(15, 23, 42, 0.10) !important;
+          box-shadow: none !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+        }
+
+        .workspace-editor-shell {
+          position: fixed !important;
+          top: var(--app-header-height) !important;
+          left: var(--app-sidebar-width) !important;
+          right: 0 !important;
+          bottom: var(--app-footer-height) !important;
+          width: auto !important;
+          height: auto !important;
+          z-index: 1390 !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          overscroll-behavior-y: auto !important;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-y;
+          padding: 22px !important;
+          background: var(--clinic-page-bg) !important;
+        }
+
+        .workspace-editor-page {
+          width: min(100%, 1180px) !important;
+          max-width: 1180px !important;
+          min-height: 0 !important;
+          margin: 0 auto !important;
+        }
+
+        .workspace-editor-page.workspace-editor-wide {
+          width: min(100%, 1440px) !important;
+          max-width: 1440px !important;
+        }
+
+        .workspace-editor-body {
+          padding-bottom: 32px !important;
+        }
+
+        .workspace-editor-body form {
+          width: 100% !important;
+          margin: 0 !important;
+        }
+
+        @media (max-width: 900px) {
+          .workspace-editor-shell {
+            left: 0 !important;
+            padding: 14px !important;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .main-content { padding-bottom: 24px !important; }
+          .page-body { padding-bottom: 36px !important; }
+          .workspace-editor-shell { padding: 10px !important; }
+
+          .form-actions,
+          .modal .form-actions,
+          .account-security-page .form-actions,
+          .workspace-editor-body .form-actions {
+            gap: 8px !important;
+            flex-wrap: wrap !important;
+          }
+
+          .form-actions .btn {
+            flex: 1 1 140px;
+          }
+        }
       `}</style>
       <aside className="sidebar">
         <div className="sidebar-brand">
@@ -1684,41 +1882,45 @@ function Shell() {
             element={<Dashboard />}
           />
 
-          <Route
-            path="/patients"
-            element={<Patients />}
-          />
+          <Route path="/patients" element={<Patients />} />
+          <Route path="/patients/new" element={<Patients editorMode="new" />} />
+          <Route path="/patients/:id/edit" element={<Patients editorMode="edit" />} />
 
-          <Route
-            path="/appointments"
-            element={<Appointments />}
-          />
+          <Route path="/appointments" element={<Appointments />} />
+          <Route path="/appointments/new" element={<Appointments editorMode="new" />} />
+          <Route path="/appointments/:id/edit" element={<Appointments editorMode="edit" />} />
 
-          <Route
-            path="/treatments"
-            element={<Treatments />}
-          />
+          <Route path="/treatments" element={<Treatments />} />
+          <Route path="/treatments/new" element={<Treatments editorMode="new" />} />
+          <Route path="/treatments/:id/edit" element={<Treatments editorMode="edit" />} />
 
-          <Route
-            path="/billing"
-            element={<Billing />}
-          />
+          <Route path="/billing" element={<Billing />} />
+          <Route path="/billing/invoices/new" element={<Billing editorMode="invoice-new" />} />
+          <Route path="/billing/invoices/:id/edit" element={<Billing editorMode="invoice-edit" />} />
+          <Route path="/billing/invoices/:id/payment" element={<Billing editorMode="payment" />} />
+          <Route path="/billing/payments/new" element={<Billing editorMode="payment" />} />
 
           <Route
             path="/account/security"
             element={<AccountSecurityPage />}
           />
 
-          <Route
-            path="/admin/clinics"
-            element={<AdminClinics />}
-          />
+          <Route path="/admin/clinics" element={<AdminClinics />} />
+          <Route path="/admin/clinics/new" element={<AdminClinics editorMode="new" />} />
 
           <Route
             path="/admin/clinics/:id"
-            element={
-              <AdminClinicDetails />
-            }
+            element={<AdminClinicDetails />}
+          />
+
+          <Route
+            path="/admin/clinics/:id/users/new"
+            element={<AdminClinicDetails editorMode="user" />}
+          />
+
+          <Route
+            path="/admin/clinics/:id/configuration"
+            element={<AdminClinicDetails editorMode="configuration" />}
           />
 
           <Route
@@ -1747,7 +1949,7 @@ function Shell() {
           <button
             type="button"
             className="global-footer-btn"
-            onClick={() => navigate("/account/security")}
+            onClick={() => openWorkspaceTab("/account/security")}
             title="Account Security"
           >
             <KeyRound size={18} />
@@ -2422,7 +2624,10 @@ const emptyPatient = {
   notes: "",
 };
 
-function Patients() {
+function Patients({ editorMode = null }) {
+  const { id: editorId } = useParams();
+  const isEditorTab = Boolean(editorMode);
+
   const [patients, setPatients] =
     useState([]);
 
@@ -2436,7 +2641,7 @@ function Patients() {
     useState(null);
 
   const [showForm, setShowForm] =
-    useState(false);
+    useState(Boolean(editorMode));
 
   const [notice, setNotice] =
     useState(null);
@@ -2507,51 +2712,64 @@ function Patients() {
     }
   }, [page]);
 
-  function openAdd() {
-    setEditing(null);
-
-    setForm(emptyPatient);
-
+  function applyPatientToEditor(patient) {
+    setEditing(patient);
+    setForm({
+      full_name: patient.full_name || "",
+      phone: patient.phone || "",
+      cnic: patient.cnic || "",
+      gender: patient.gender || "",
+      date_of_birth: inputDate(patient.date_of_birth),
+      address: patient.address || "",
+      medical_history: patient.medical_history || "",
+      allergies: patient.allergies || "",
+      notes: patient.notes || "",
+    });
     setShowForm(true);
+  }
+
+  function openAdd() {
+    openWorkspaceTab("/patients/new");
   }
 
   function openEdit(patient) {
-    setEditing(patient);
-
-    setForm({
-      full_name:
-        patient.full_name || "",
-
-      phone:
-        patient.phone || "",
-
-      cnic:
-        patient.cnic || "",
-
-      gender:
-        patient.gender || "",
-
-      date_of_birth:
-        inputDate(
-          patient.date_of_birth
-        ),
-
-      address:
-        patient.address || "",
-
-      medical_history:
-        patient.medical_history ||
-        "",
-
-      allergies:
-        patient.allergies || "",
-
-      notes:
-        patient.notes || "",
-    });
-
-    setShowForm(true);
+    openWorkspaceTab(`/patients/${patient.id}/edit`, { patient });
   }
+
+  function closeEditor() {
+    if (isEditorTab) return closeWorkspaceTab("/patients");
+    setShowForm(false);
+  }
+
+  useEffect(() => {
+    if (!isEditorTab) return;
+
+    if (editorMode === "new") {
+      setEditing(null);
+      setForm(emptyPatient);
+      setShowForm(true);
+      return;
+    }
+
+    if (editorMode !== "edit" || !editorId) return;
+
+    const cached = readWorkspacePayload(window.location.pathname)?.patient;
+    if (cached) {
+      applyPatientToEditor(cached);
+      return;
+    }
+
+    let active = true;
+    api.get(`/patients/${editorId}`)
+      .then(({ data }) => {
+        if (active) applyPatientToEditor(data?.patient || data?.data || data);
+      })
+      .catch((err) => {
+        if (active) setNotice({ type: "error", message: getError(err) });
+      });
+
+    return () => { active = false; };
+  }, [isEditorTab, editorMode, editorId]);
 
   async function save(e) {
     e.preventDefault();
@@ -2568,6 +2786,11 @@ function Patients() {
             "/patients",
             form
           );
+
+      if (isEditorTab) {
+        closeWorkspaceTab("/patients", true);
+        return;
+      }
 
       setNotice({
         type: "success",
@@ -2800,9 +3023,7 @@ function Patients() {
               ? "Edit Patient"
               : "Add Patient"
           }
-          onClose={() =>
-            setShowForm(false)
-          }
+          onClose={closeEditor}
           wide
         >
           <form onSubmit={save}>
@@ -2986,9 +3207,7 @@ function Patients() {
             </div>
 
             <FormActions
-              onCancel={() =>
-                setShowForm(false)
-              }
+              onCancel={closeEditor}
               busy={saving}
               text={
                 editing
@@ -3013,14 +3232,17 @@ const emptyAppointment = {
   status: "scheduled",
 };
 
-function Appointments() {
+function Appointments({ editorMode = null }) {
+  const { id: editorId } = useParams();
+  const isEditorTab = Boolean(editorMode);
+
   const [appointments, setAppointments] = useState([]);
   const [patients, setPatients] = useState([]);
 
   const [form, setForm] = useState(emptyAppointment);
 
   const [editing, setEditing] = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(Boolean(editorMode));
 
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -3088,25 +3310,60 @@ function Appointments() {
     if (page > 1) load(page, search);
   }, [page]);
 
-  function openAdd() {
-    setEditing(null);
-    setForm(emptyAppointment);
-    setShowForm(true);
-  }
-
-  function openEdit(item) {
+  function applyAppointmentToEditor(item) {
     setEditing(item);
-
     setForm({
-      patient_id: item.patient_id,
+      patient_id: item.patient_id || "",
       appointment_at: inputDateTime(item.appointment_at),
       reason: item.reason || "",
       notes: item.notes || "",
       status: item.status || "scheduled",
     });
-
     setShowForm(true);
   }
+
+  function openAdd() {
+    openWorkspaceTab("/appointments/new");
+  }
+
+  function openEdit(item) {
+    openWorkspaceTab(`/appointments/${item.id}/edit`, { appointment: item });
+  }
+
+  function closeEditor() {
+    if (isEditorTab) return closeWorkspaceTab("/appointments");
+    setShowForm(false);
+  }
+
+  useEffect(() => {
+    if (!isEditorTab) return;
+
+    if (editorMode === "new") {
+      setEditing(null);
+      setForm(emptyAppointment);
+      setShowForm(true);
+      return;
+    }
+
+    if (editorMode !== "edit" || !editorId) return;
+
+    const cached = readWorkspacePayload(window.location.pathname)?.appointment;
+    if (cached) {
+      applyAppointmentToEditor(cached);
+      return;
+    }
+
+    let active = true;
+    api.get(`/appointments/${editorId}`)
+      .then(({ data }) => {
+        if (active) applyAppointmentToEditor(data?.appointment || data?.data || data);
+      })
+      .catch((err) => {
+        if (active) setNotice({ type: "error", message: getError(err) });
+      });
+
+    return () => { active = false; };
+  }, [isEditorTab, editorMode, editorId]);
 
   async function save(e) {
     e.preventDefault();
@@ -3125,6 +3382,11 @@ function Appointments() {
             payload
           )
         : await api.post("/appointments", payload);
+
+      if (isEditorTab) {
+        closeWorkspaceTab("/appointments", true);
+        return;
+      }
 
       setNotice({
         type: "success",
@@ -3353,9 +3615,7 @@ function Appointments() {
               ? "Edit Appointment"
               : "New Appointment"
           }
-          onClose={() =>
-            setShowForm(false)
-          }
+          onClose={closeEditor}
           wide
         >
           <form onSubmit={save}>
@@ -3462,9 +3722,7 @@ function Appointments() {
             </div>
 
             <FormActions
-              onCancel={() =>
-                setShowForm(false)
-              }
+              onCancel={closeEditor}
               busy={saving}
               text={
                 editing
@@ -3499,14 +3757,17 @@ const emptyTreatment = {
   fee: "",
 };
 
-function Treatments() {
+function Treatments({ editorMode = null }) {
+  const { id: editorId } = useParams();
+  const isEditorTab = Boolean(editorMode);
+
   const [treatments, setTreatments] = useState([]);
   const [patients, setPatients] = useState([]);
 
   const [form, setForm] = useState(emptyTreatment);
   const [editing, setEditing] = useState(null);
 
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(Boolean(editorMode));
 
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -3574,61 +3835,68 @@ function Treatments() {
     if (page > 1) load(page, search);
   }, [page]);
 
-  function openAdd() {
-    setEditing(null);
-
+  function applyTreatmentToEditor(item) {
+    setEditing(item);
     setForm({
-      ...emptyTreatment,
-
-      treatment_date: new Date()
-        .toISOString()
-        .slice(0, 10),
+      patient_id: item.patient_id || "",
+      treatment_date: inputDate(item.treatment_date),
+      patient_age: item.patient_age ?? "",
+      doctor_name: item.doctor_name_manual || item.doctor_name || "",
+      tooth_no: item.tooth_no || "",
+      diagnosis: item.diagnosis || "",
+      procedure: item.procedure || "",
+      prescription: item.prescription || "",
+      clinical_notes: item.clinical_notes || "",
+      fee: item.fee ?? "",
     });
-
     setShowForm(true);
+  }
+
+  function openAdd() {
+    openWorkspaceTab("/treatments/new");
   }
 
   function openEdit(item) {
-    setEditing(item);
-
-    setForm({
-      patient_id:
-        item.patient_id || "",
-
-      treatment_date:
-        inputDate(
-          item.treatment_date
-        ),
-
-      patient_age:
-        item.patient_age ?? "",
-
-      doctor_name:
-        item.doctor_name_manual ||
-        item.doctor_name ||
-        "",
-
-      tooth_no:
-        item.tooth_no || "",
-
-      diagnosis:
-        item.diagnosis || "",
-
-      procedure:
-        item.procedure || "",
-
-      prescription:
-        item.prescription || "",
-
-      clinical_notes:
-        item.clinical_notes || "",
-
-      fee:
-        item.fee ?? "",
-    });
-
-    setShowForm(true);
+    openWorkspaceTab(`/treatments/${item.id}/edit`, { treatment: item });
   }
+
+  function closeEditor() {
+    if (isEditorTab) return closeWorkspaceTab("/treatments");
+    setShowForm(false);
+  }
+
+  useEffect(() => {
+    if (!isEditorTab) return;
+
+    if (editorMode === "new") {
+      setEditing(null);
+      setForm({
+        ...emptyTreatment,
+        treatment_date: new Date().toISOString().slice(0, 10),
+      });
+      setShowForm(true);
+      return;
+    }
+
+    if (editorMode !== "edit" || !editorId) return;
+
+    const cached = readWorkspacePayload(window.location.pathname)?.treatment;
+    if (cached) {
+      applyTreatmentToEditor(cached);
+      return;
+    }
+
+    let active = true;
+    api.get(`/treatments/${editorId}`)
+      .then(({ data }) => {
+        if (active) applyTreatmentToEditor(data?.treatment || data?.data || data);
+      })
+      .catch((err) => {
+        if (active) setNotice({ type: "error", message: getError(err) });
+      });
+
+    return () => { active = false; };
+  }, [isEditorTab, editorMode, editorId]);
 
   async function save(e) {
     e.preventDefault();
@@ -3645,6 +3913,11 @@ function Treatments() {
             "/treatments",
             form
           );
+
+      if (isEditorTab) {
+        closeWorkspaceTab("/treatments", true);
+        return;
+      }
 
       setNotice({
         type: "success",
@@ -4307,9 +4580,7 @@ function Treatments() {
               ? "Edit Treatment"
               : "Add Treatment"
           }
-          onClose={() =>
-            setShowForm(false)
-          }
+          onClose={closeEditor}
           wide
         >
           <form onSubmit={save}>
@@ -4494,9 +4765,7 @@ function Treatments() {
             </div>
 
             <FormActions
-              onCancel={() =>
-                setShowForm(false)
-              }
+              onCancel={closeEditor}
               busy={saving}
               text={
                 editing
@@ -4513,7 +4782,10 @@ function Treatments() {
    BILLING
 ========================================================= */
 
-function Billing() {
+function Billing({ editorMode = null }) {
+  const { id: editorId } = useParams();
+  const isEditorTab = Boolean(editorMode);
+
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [patients, setPatients] = useState([]);
@@ -4523,10 +4795,10 @@ function Billing() {
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [invoiceModal, setInvoiceModal] = useState(false);
+  const [invoiceModal, setInvoiceModal] = useState(editorMode === "invoice-new" || editorMode === "invoice-edit");
   const [editingInvoice, setEditingInvoice] = useState(null);
 
-  const [paymentModal, setPaymentModal] = useState(false);
+  const [paymentModal, setPaymentModal] = useState(editorMode === "payment");
 
   const [invoiceForm, setInvoiceForm] = useState({
     patient_id: "",
@@ -4639,37 +4911,30 @@ function Billing() {
       ? activeInvoices
       : paidInvoices;
 
-  function newInvoice() {
-    /*
-     * Important:
-     * Close payment modal before opening invoice modal.
-     * This prevents the old double-modal problem.
-     */
-    setPaymentModal(false);
-    setEditingInvoice(null);
-
-    setInvoiceForm({
-      patient_id: "",
-      total: "",
-      discount: "0",
-      notes: "",
-    });
-
-    setInvoiceModal(true);
-  }
-
-  function editInvoice(invoice) {
+  function applyInvoiceToEditor(invoice) {
     setPaymentModal(false);
     setEditingInvoice(invoice);
-
     setInvoiceForm({
-      patient_id: invoice.patient_id,
-      total: invoice.total,
+      patient_id: invoice.patient_id || "",
+      total: invoice.total ?? "",
       discount: invoice.discount || 0,
       notes: invoice.notes || "",
     });
-
     setInvoiceModal(true);
+  }
+
+  function newInvoice() {
+    openWorkspaceTab("/billing/invoices/new");
+  }
+
+  function editInvoice(invoice) {
+    openWorkspaceTab(`/billing/invoices/${invoice.id}/edit`, { invoice });
+  }
+
+  function closeInvoiceEditor() {
+    if (isEditorTab) return closeWorkspaceTab("/billing");
+    setInvoiceModal(false);
+    setEditingInvoice(null);
   }
 
   async function saveInvoice(e) {
@@ -4708,6 +4973,11 @@ function Billing() {
         );
       }
 
+      if (isEditorTab) {
+        closeWorkspaceTab("/billing", true);
+        return;
+      }
+
       setNotice({
         type: "success",
         message: response.data.message,
@@ -4728,21 +4998,75 @@ function Billing() {
   }
 
   function receivePayment(invoice = null) {
-    /*
-     * Mutually exclusive modals.
-     */
-    setInvoiceModal(false);
-    setEditingInvoice(null);
+    const path = invoice?.id
+      ? `/billing/invoices/${invoice.id}/payment`
+      : "/billing/payments/new";
 
-    setPaymentForm({
-      invoice_id: invoice?.id || "",
-      amount: invoice?.balance || "",
-      method: "cash",
-      reference: "",
-    });
-
-    setPaymentModal(true);
+    openWorkspaceTab(path, invoice ? { invoice } : null);
   }
+
+  function closePaymentEditor() {
+    if (isEditorTab) return closeWorkspaceTab("/billing");
+    setPaymentModal(false);
+  }
+
+  useEffect(() => {
+    if (!isEditorTab) return;
+
+    if (editorMode === "invoice-new") {
+      setPaymentModal(false);
+      setEditingInvoice(null);
+      setInvoiceForm({
+        patient_id: "",
+        total: "",
+        discount: "0",
+        notes: "",
+      });
+      setInvoiceModal(true);
+      return;
+    }
+
+    if (editorMode === "invoice-edit") {
+      const cached = readWorkspacePayload(window.location.pathname)?.invoice;
+
+      if (cached) {
+        applyInvoiceToEditor(cached);
+      } else {
+        setNotice({
+          type: "error",
+          message: "Invoice data is unavailable. Return to Billing and open Edit again.",
+        });
+      }
+      return;
+    }
+
+    if (editorMode === "payment") {
+      const cached = readWorkspacePayload(window.location.pathname)?.invoice;
+
+      setInvoiceModal(false);
+      setEditingInvoice(null);
+      setPaymentForm({
+        invoice_id: cached?.id || editorId || "",
+        amount: cached?.balance || "",
+        method: "cash",
+        reference: "",
+      });
+      setPaymentModal(true);
+    }
+  }, [isEditorTab, editorMode, editorId]);
+
+  useEffect(() => {
+    if (editorMode !== "payment" || !editorId || paymentForm.amount) return;
+
+    const invoice = invoices.find((item) => item.id === editorId);
+    if (invoice) {
+      setPaymentForm((current) => ({
+        ...current,
+        invoice_id: invoice.id,
+        amount: invoice.balance || "",
+      }));
+    }
+  }, [editorMode, editorId, invoices, paymentForm.amount]);
 
   async function savePayment(e) {
     e.preventDefault();
@@ -4754,6 +5078,11 @@ function Billing() {
         "/billing/payment",
         paymentForm
       );
+
+      if (isEditorTab) {
+        closeWorkspaceTab("/billing", true);
+        return;
+      }
 
       setNotice({
         type: "success",
@@ -5256,10 +5585,7 @@ function Billing() {
               ? "Edit Invoice"
               : "New Invoice"
           }
-          onClose={() => {
-            setInvoiceModal(false);
-            setEditingInvoice(null);
-          }}
+          onClose={closeInvoiceEditor}
         >
           <form
             onSubmit={saveInvoice}
@@ -5347,10 +5673,7 @@ function Billing() {
             </Field>
 
             <FormActions
-              onCancel={() => {
-                setInvoiceModal(false);
-                setEditingInvoice(null);
-              }}
+              onCancel={closeInvoiceEditor}
               busy={saving}
               text={
                 editingInvoice
@@ -5365,9 +5688,7 @@ function Billing() {
       {paymentModal && (
         <Modal
           title="Receive Payment"
-          onClose={() =>
-            setPaymentModal(false)
-          }
+          onClose={closePaymentEditor}
         >
           <form
             onSubmit={savePayment}
@@ -5503,9 +5824,7 @@ function Billing() {
             </Field>
 
             <FormActions
-              onCancel={() =>
-                setPaymentModal(false)
-              }
+              onCancel={closePaymentEditor}
               busy={saving}
               text="Receive Payment"
             />
@@ -5578,7 +5897,9 @@ function SuperAdminGuard({
    ADMIN CLINICS LIST
 ========================================================= */
 
-function AdminClinics() {
+function AdminClinics({ editorMode = null }) {
+  const isEditorTab = editorMode === "new";
+
   const navigate =
     useNavigate();
 
@@ -5592,7 +5913,7 @@ function AdminClinics() {
     useState(1);
 
   const [showForm, setShowForm] =
-    useState(false);
+    useState(isEditorTab);
 
   const [form, setForm] =
     useState(emptyClinic);
@@ -5678,6 +5999,11 @@ function AdminClinics() {
           form
         );
 
+      if (isEditorTab) {
+        closeWorkspaceTab("/admin/clinics", true);
+        return;
+      }
+
       setNotice({
         type: "success",
         message:
@@ -5703,12 +6029,20 @@ function AdminClinics() {
   }
 
   function openNewClinic() {
-    setForm({
-      ...emptyClinic,
-    });
-
-    setShowForm(true);
+    openWorkspaceTab("/admin/clinics/new");
   }
+
+  function closeEditor() {
+    if (isEditorTab) return closeWorkspaceTab("/admin/clinics");
+    setShowForm(false);
+  }
+
+  useEffect(() => {
+    if (!isEditorTab) return;
+    setForm({ ...emptyClinic });
+    setShowForm(true);
+  }, [isEditorTab]);
+
 
   return (
     <SuperAdminGuard>
@@ -5921,9 +6255,7 @@ function AdminClinics() {
         {showForm && (
           <Modal
             title="New Clinic"
-            onClose={() =>
-              setShowForm(false)
-            }
+            onClose={closeEditor}
             wide
           >
             <form
@@ -6064,11 +6396,7 @@ function AdminClinics() {
               </div>
 
               <FormActions
-                onCancel={() =>
-                  setShowForm(
-                    false
-                  )
-                }
+                onCancel={closeEditor}
                 busy={saving}
                 text="Create Clinic"
               />
@@ -6358,7 +6686,9 @@ function ThemeColorControl({
   );
 }
 
-function AdminClinicDetails() {
+function AdminClinicDetails({ editorMode = null }) {
+  const isEditorTab = Boolean(editorMode);
+
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -6368,10 +6698,10 @@ function AdminClinicDetails() {
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [showUser, setShowUser] = useState(false);
+  const [showUser, setShowUser] = useState(editorMode === "user");
 
   const [showConfiguration, setShowConfiguration] =
-    useState(false);
+    useState(editorMode === "configuration");
 
   const [saving, setSaving] = useState(false);
 
@@ -6429,12 +6759,49 @@ function AdminClinicDetails() {
   function openConfiguration() {
     if (!clinic) return;
 
+    if (!isEditorTab) {
+      openWorkspaceTab(`/admin/clinics/${id}/configuration`);
+      return;
+    }
+
     setConfigurationForm(
       clinicToConfiguration(clinic)
     );
 
     setShowConfiguration(true);
   }
+
+  function openNewClinicUser() {
+    if (!isEditorTab) {
+      openWorkspaceTab(`/admin/clinics/${id}/users/new`);
+      return;
+    }
+
+    setShowUser(true);
+  }
+
+  function closeUserEditor() {
+    if (isEditorTab) return closeWorkspaceTab(`/admin/clinics/${id}`);
+    setShowUser(false);
+  }
+
+  function closeConfigurationEditor() {
+    if (isEditorTab) return closeWorkspaceTab(`/admin/clinics/${id}`);
+    setShowConfiguration(false);
+  }
+
+  useEffect(() => {
+    if (!clinic || !isEditorTab) return;
+
+    if (editorMode === "configuration") {
+      setConfigurationForm(clinicToConfiguration(clinic));
+      setShowConfiguration(true);
+    }
+
+    if (editorMode === "user") {
+      setShowUser(true);
+    }
+  }, [clinic, isEditorTab, editorMode, id]);
 
   function updateThemeColor(field, value) {
     setConfigurationForm((current) => ({
@@ -6481,6 +6848,11 @@ function AdminClinicDetails() {
           configurationForm
         );
 
+      if (isEditorTab) {
+        closeWorkspaceTab(`/admin/clinics/${id}`, true);
+        return;
+      }
+
       setNotice({
         type: "success",
         message:
@@ -6513,6 +6885,11 @@ function AdminClinicDetails() {
           `/admin/clinics/${id}/users`,
           userForm
         );
+
+      if (isEditorTab) {
+        closeWorkspaceTab(`/admin/clinics/${id}`, true);
+        return;
+      }
 
       setNotice({
         type: "success",
@@ -6673,9 +7050,7 @@ function AdminClinicDetails() {
                 <button
                   type="button"
                   className="btn primary"
-                  onClick={() =>
-                    setShowUser(true)
-                  }
+                  onClick={openNewClinicUser}
                 >
                   <UserPlus size={18} />
                   Add User
@@ -7078,9 +7453,7 @@ function AdminClinicDetails() {
         {showUser && (
           <Modal
             title="Create Clinic User"
-            onClose={() =>
-              setShowUser(false)
-            }
+            onClose={closeUserEditor}
             wide
           >
             <form
@@ -7206,9 +7579,7 @@ function AdminClinicDetails() {
               </div>
 
               <FormActions
-                onCancel={() =>
-                  setShowUser(false)
-                }
+                onCancel={closeUserEditor}
                 busy={saving}
                 text="Create User"
               />
@@ -7223,9 +7594,7 @@ function AdminClinicDetails() {
         {showConfiguration && (
           <Modal
             title="Clinic Configuration & Theme Studio"
-            onClose={() =>
-              setShowConfiguration(false)
-            }
+            onClose={closeConfigurationEditor}
             wide
           >
             <style>{`
@@ -7954,9 +8323,7 @@ function AdminClinicDetails() {
                   type="button"
                   className="btn secondary"
                   disabled={saving}
-                  onClick={() =>
-                    setShowConfiguration(false)
-                  }
+                  onClick={closeConfigurationEditor}
                 >
                   Cancel
                 </button>
