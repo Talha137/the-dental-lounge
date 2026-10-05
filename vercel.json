@@ -12,12 +12,6 @@
   },
   "rewrites": [
     {
-      "source": "/api",
-      "destination": {
-        "service": "backend"
-      }
-    },
-    {
       "source": "/api/(.*)",
       "destination": {
         "service": "backend"
@@ -26,8 +20,12 @@
     {
       "source": "/(.*)",
       "destination": {
-        "service": "frontend",
-        "path": "/index.html"
+        "service": "frontend"
+      }
+    }
+  ]
+}": {
+        "service": "frontend"
       }
     }
   ]
