@@ -20,16 +20,42 @@ const app = express();
 
 app.use(helmet());
 
+const configuredFrontendOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.APP_URL,
+]
+  .filter(Boolean)
+  .map((value) => value.replace(/\/+$/, ""));
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+
+  const normalizedOrigin = origin.replace(/\/+$/, "");
+
+  if (configuredFrontendOrigins.includes(normalizedOrigin)) {
+    return true;
+  }
+
+  // Local development only: Vite/Vercel dev may choose a dynamic port.
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const url = new URL(normalizedOrigin);
+      return (
+        (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
+        (url.protocol === "http:" || url.protocol === "https:")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      const allowedOrigins = [
-        "http://localhost:5173",
-        "http://localhost:63866",
-        process.env.FRONTEND_URL,
-      ].filter(Boolean);
-
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
 
